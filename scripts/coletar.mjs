@@ -10,10 +10,11 @@
 
 import { mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import path from "node:path";
+import { gzipSync, gunzipSync } from "node:zlib";
 
 const API = "https://pncp.gov.br/api/consulta/v1/contratacoes/proposta";
 const TAMANHO = 50;          // máximo aceito pela API
-const PARALELO = 8;          // requisições simultâneas
+const PARALELO = 4;          // requisições simultâneas (o PNCP oscila com mais que isso)
 const OUT = path.resolve("site/data");
 // Estados coletados (Sudeste). Para mudar, ajuste a variável UFS no workflow, ex.: "SP,RJ,MG,ES,PR".
 const UFS = (process.env.UFS || "SP,RJ,MG,ES").split(",").map((u) => u.trim().toUpperCase()).filter(Boolean);
@@ -26,19 +27,27 @@ const INICIO = Date.now();
 const LIMITE_MS = (Number(process.env.TEMPO_MAX_MIN) || 50) * 60000; // para de pedir páginas novas depois disso
 const decorrido = () => `${Math.round((Date.now() - INICIO) / 1000)}s`;
 let parcial = false;
+const erros = {};            // contagem de erros por tipo, gravada no meta.json
+const contagemUF = {};       // esperado x recebido por estado, gravado no meta.json
+let reaproveitados = 0;
+// modalidades do PNCP: dividir a consulta por elas deixa cada lista curta (páginas "fundas" são as que mais falham)
+const MODALIDADES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+// endereço público do site, de onde lemos a coleta anterior para cobrir falhas
+const SITE_URL = (process.env.SITE_URL || "").replace(/\/$/, "");
 
-async function baixarPagina({ uf, pagina }, dataFinal, tentativas = 4) {
-  const url = `${API}?dataFinal=${dataFinal}&uf=${uf}&pagina=${pagina}&tamanhoPagina=${TAMANHO}`;
+async function baixarPagina({ uf, mod, pagina }, dataFinal, tentativas = 4) {
+  const url = `${API}?dataFinal=${dataFinal}&uf=${uf}${mod ? `&codigoModalidadeContratacao=${mod}` : ""}&pagina=${pagina}&tamanhoPagina=${TAMANHO}`;
   for (let t = 1; t <= tentativas; t++) {
     try {
-      const r = await fetch(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(30000) });
-      if (r.status === 204) return { data: [], totalPaginas: 0 };
-      if (r.status === 429) { await sleep(5000 * t); continue; }
+      const r = await fetch(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(45000) });
+      if (r.status === 204) return { data: [], totalPaginas: 0, totalRegistros: 0 };
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return await r.json();
     } catch (e) {
-      if (t === tentativas) { console.error(`${uf} página ${pagina} falhou: ${e.message}`); return null; }
-      await sleep(1000 * t * t);
+      const tipo = e.name === "TimeoutError" ? "tempo esgotado" : e.message;
+      erros[tipo] = (erros[tipo] || 0) + 1;
+      if (t === tentativas) { console.error(`${uf}/mod ${mod} página ${pagina} falhou: ${tipo}`); return null; }
+      await sleep(2000 * t * t + Math.random() * 1000);
     }
   }
   return null;
@@ -55,24 +64,39 @@ async function coletarTudo() {
   const dataFinal = ymd(fim);
 
   const registros = [];
-  const pendentes = [];
+  const fila = [];
   let total = 0, feitas = 0;
-  for (const uf of UFS) {
-    const primeira = await baixarPagina({ uf, pagina: 1 }, dataFinal, 8);
-    if (!primeira) throw new Error(`Não foi possível acessar a API do PNCP (${uf}).`);
-    const paginas = primeira.totalPaginas || 1;
-    console.log(`${uf}: ${primeira.totalRegistros} registros em ${paginas} páginas (${decorrido()})`);
-    registros.push(...(primeira.data || []));
-    total += paginas; feitas++;
-    for (let p = 2; p <= paginas; p++) pendentes.push({ uf, pagina: p });
-  }
 
-  async function rodada(fila, tentativas) {
+  // 1) total esperado por estado (consulta sem modalidade, só a 1ª página)
+  for (const uf of UFS) {
+    const j = await baixarPagina({ uf, pagina: 1 }, dataFinal, 8);
+    contagemUF[uf] = { esperado: j ? j.totalRegistros : null, recebido: 0 };
+    console.log(`${uf}: ${j ? j.totalRegistros : "?"} registros esperados (${decorrido()})`);
+  }
+  // 2) primeira página de cada estado x modalidade; o resto vai para a fila
+  const primeiras = UFS.flatMap((uf) => MODALIDADES.map((mod) => ({ uf, mod, pagina: 1 })));
+  const semPrimeira = [];
+  async function abrirParticao(t) {
+    const j = await baixarPagina(t, dataFinal, 6);
+    if (!j) { semPrimeira.push(t); return; }
+    const paginas = j.totalPaginas || 0;
+    if (!paginas) return;
+    registros.push(...(j.data || []));
+    total += paginas; feitas++;
+    for (let p = 2; p <= paginas; p++) fila.push({ uf: t.uf, mod: t.mod, pagina: p });
+  }
+  for (let i = 0; i < primeiras.length; i += PARALELO) await Promise.all(primeiras.slice(i, i + PARALELO).map(abrirParticao));
+  for (const t of semPrimeira.splice(0)) await abrirParticao(t); // segunda chance, uma de cada vez
+  if (semPrimeira.length) parcial = true;
+  console.log(`Partições abertas: ${feitas} com dados, ${fila.length} páginas na fila (${decorrido()})`);
+
+  // 3) demais páginas, em rodadas; o que falhar volta para a próxima rodada com pausa maior
+  async function rodada(lista, tentativas) {
     const falhas = [];
     async function trabalhador() {
-      while (fila.length) {
+      while (lista.length) {
         if (Date.now() - INICIO > LIMITE_MS) { parcial = true; return; }
-        const t = fila.shift();
+        const t = lista.shift();
         const j = await baixarPagina(t, dataFinal, tentativas);
         if (j) { registros.push(...(j.data || [])); feitas++; }
         else falhas.push(t);
@@ -80,18 +104,32 @@ async function coletarTudo() {
       }
     }
     await Promise.all(Array.from({ length: PARALELO }, trabalhador));
-    return falhas.concat(fila);
+    return falhas.concat(lista);
   }
-
-  let faltando = await rodada(pendentes, 3);
-  if (faltando.length && !parcial) {
-    console.log(`Tentando de novo ${faltando.length} páginas que falharam…`);
-    await sleep(10000);
-    faltando = await rodada(faltando, 5);
+  let faltando = await rodada(fila, 3);
+  for (let r = 1; r <= 5 && faltando.length && Date.now() - INICIO < LIMITE_MS; r++) {
+    console.log(`Rodada ${r + 1}: tentando de novo ${faltando.length} páginas…`);
+    await sleep(15000 * r);
+    faltando = await rodada(faltando, 4);
   }
   if (faltando.length) parcial = true;
   console.log(`Coleta: ${feitas}/${total} páginas, ${registros.length} registros em ${decorrido()}${parcial ? " (PARCIAL)" : ""}`);
-  if (feitas < total * 0.5) throw new Error("Menos da metade das páginas veio. Abortando para não publicar dados muito incompletos.");
+  if (total && feitas < total * 0.5) throw new Error("Menos da metade das páginas veio. Abortando para não publicar dados muito incompletos.");
+
+  // 4) se algo faltou, reaproveita da coleta anterior o que ainda está aberto
+  if (parcial && SITE_URL) {
+    try {
+      const r = await fetch(`${SITE_URL}/data/cache.json.gz`, { signal: AbortSignal.timeout(60000) });
+      if (r.ok) {
+        const antigos = JSON.parse(gunzipSync(Buffer.from(await r.arrayBuffer())).toString("utf8"));
+        const tem = new Set(registros.map((x) => x.numeroControlePNCP));
+        for (const x of antigos) {
+          if (!tem.has(x.numeroControlePNCP)) { registros.push(x); tem.add(x.numeroControlePNCP); reaproveitados++; }
+        }
+        console.log(`Reaproveitados da coleta anterior: ${reaproveitados}`);
+      } else console.log(`Sem coleta anterior para reaproveitar (HTTP ${r.status}).`);
+    } catch (e) { console.log(`Não deu para ler a coleta anterior: ${e.message}`); }
+  }
   return registros;
 }
 
@@ -230,6 +268,8 @@ async function main() {
     if (new Date(r.dataEncerramentoProposta) < hojeBR) continue;
     vistos.add(id);
     lista.push(r);
+    const u = r.unidadeOrgao.ufSigla;
+    (contagemUF[u] ||= { esperado: null, recebido: 0 }).recebido++;
   }
   lista.sort((a, b) => a.dataEncerramentoProposta.localeCompare(b.dataEncerramentoProposta));
 
@@ -320,7 +360,12 @@ async function main() {
   for (const [uf, det] of Object.entries(porUF)) {
     await writeFile(path.join(OUT, "uf", `${uf}.json`), JSON.stringify(det));
   }
-  await writeFile(path.join(OUT, "meta.json"), JSON.stringify({ gerado, parcial, total: linhas.length, brutos: brutos.length }, null, 2));
+  // coleta bruta guardada no próprio site: a próxima execução usa para cobrir páginas que falharem
+  await writeFile(path.join(OUT, "cache.json.gz"), gzipSync(JSON.stringify(lista)));
+  await writeFile(path.join(OUT, "meta.json"), JSON.stringify({
+    gerado, parcial, total: linhas.length, brutos: brutos.length, reaproveitados, porUF: contagemUF, erros,
+    duracao: decorrido(),
+  }, null, 2));
   console.log(`Pronto: ${linhas.length} licitações em aberto (de ${brutos.length} registros recebidos).`);
 }
 
