@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   atualizar:
@@ -32,6 +32,8 @@ jobs:
 
       - name: Baixar licitações abertas do PNCP
         run: node scripts/coletar.mjs
+        env:
+          TEMPO_MAX_MIN: "50"
 
       - uses: actions/configure-pages@v5
 

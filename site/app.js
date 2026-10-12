@@ -72,7 +72,7 @@ async function carregar() {
     busca: semAcento(`${l[4]} ${l[3]} ${l[2]} ${l[1]} ${UFS[l[1]] || ""}`),
   }));
   const gerado = new Date(base.gerado);
-  el.status.innerHTML = `<b>${base.total.toLocaleString("pt-BR")}</b> licitações com propostas abertas · atualizado em ${gerado.toLocaleDateString("pt-BR")} às ${gerado.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+  el.status.innerHTML = `<b>${base.total.toLocaleString("pt-BR")}</b> licitações com propostas abertas · atualizado em ${gerado.toLocaleDateString("pt-BR")} às ${gerado.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}${base.parcial ? " · a API do governo estava lenta e parte da lista pode faltar hoje" : ""}`;
 
   const contaUF = {};
   linhas.forEach((l) => (contaUF[l.uf] = (contaUF[l.uf] || 0) + 1));

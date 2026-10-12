@@ -13,28 +13,33 @@ import path from "node:path";
 
 const API = "https://pncp.gov.br/api/consulta/v1/contratacoes/proposta";
 const TAMANHO = 50;          // máximo aceito pela API
-const PARALELO = 6;          // requisições simultâneas
+const PARALELO = 8;          // requisições simultâneas
 const OUT = path.resolve("site/data");
 
 // ---------- utilidades ----------
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ymd = (d) => d.toISOString().slice(0, 10).replace(/-/g, "");
 
-async function baixarPagina(pagina, dataFinal, tentativa = 1) {
+const INICIO = Date.now();
+const LIMITE_MS = (Number(process.env.TEMPO_MAX_MIN) || 50) * 60000; // para de pedir páginas novas depois disso
+const decorrido = () => `${Math.round((Date.now() - INICIO) / 1000)}s`;
+let parcial = false;
+
+async function baixarPagina(pagina, dataFinal, tentativas = 4) {
   const url = `${API}?dataFinal=${dataFinal}&pagina=${pagina}&tamanhoPagina=${TAMANHO}`;
-  try {
-    const r = await fetch(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(60000) });
-    if (r.status === 204) return { data: [], totalPaginas: 0 };
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return await r.json();
-  } catch (e) {
-    if (tentativa >= 6) {
-      console.error(`Página ${pagina} falhou de vez: ${e.message}`);
-      return null;
+  for (let t = 1; t <= tentativas; t++) {
+    try {
+      const r = await fetch(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(30000) });
+      if (r.status === 204) return { data: [], totalPaginas: 0 };
+      if (r.status === 429) { await sleep(5000 * t); continue; }
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return await r.json();
+    } catch (e) {
+      if (t === tentativas) { console.error(`Página ${pagina} falhou: ${e.message}`); return null; }
+      await sleep(1000 * t * t);
     }
-    await sleep(1500 * tentativa * tentativa);
-    return baixarPagina(pagina, dataFinal, tentativa + 1);
   }
+  return null;
 }
 
 async function coletarTudo() {
@@ -47,28 +52,40 @@ async function coletarTudo() {
   fim.setFullYear(fim.getFullYear() + 5);
   const dataFinal = ymd(fim);
 
-  const primeira = await baixarPagina(1, dataFinal);
+  const primeira = await baixarPagina(1, dataFinal, 8);
   if (!primeira) throw new Error("Não foi possível acessar a API do PNCP.");
   const total = primeira.totalPaginas || 1;
-  console.log(`PNCP: ${primeira.totalRegistros} registros em ${total} páginas`);
+  console.log(`PNCP: ${primeira.totalRegistros} registros em ${total} páginas (${decorrido()})`);
 
   const registros = [...(primeira.data || [])];
-  const falhas = [];
-  let proxima = 2;
-  async function trabalhador() {
-    while (proxima <= total) {
-      const p = proxima++;
-      const j = await baixarPagina(p, dataFinal);
-      if (j) registros.push(...(j.data || []));
-      else falhas.push(p);
-      if (p % 100 === 0) console.log(`  ${p}/${total} páginas`);
+  const pendentes = Array.from({ length: total - 1 }, (_, i) => i + 2);
+  let feitas = 1;
+
+  async function rodada(fila, tentativas) {
+    const falhas = [];
+    async function trabalhador() {
+      while (fila.length) {
+        if (Date.now() - INICIO > LIMITE_MS) { parcial = true; return; }
+        const p = fila.shift();
+        const j = await baixarPagina(p, dataFinal, tentativas);
+        if (j) { registros.push(...(j.data || [])); feitas++; }
+        else falhas.push(p);
+        if (feitas % 50 === 0) console.log(`  ${feitas}/${total} páginas · ${registros.length} registros · ${decorrido()}`);
+      }
     }
+    await Promise.all(Array.from({ length: PARALELO }, trabalhador));
+    return falhas.concat(fila);
   }
-  await Promise.all(Array.from({ length: PARALELO }, trabalhador));
-  if (falhas.length > total * 0.05) {
-    throw new Error(`Muitas páginas falharam (${falhas.length}). Abortando para não publicar dados incompletos.`);
+
+  let faltando = await rodada(pendentes, 3);
+  if (faltando.length && !parcial) {
+    console.log(`Tentando de novo ${faltando.length} páginas que falharam…`);
+    await sleep(10000);
+    faltando = await rodada(faltando, 5);
   }
-  if (falhas.length) console.warn(`Aviso: ${falhas.length} páginas não vieram: ${falhas.join(", ")}`);
+  if (faltando.length) parcial = true;
+  console.log(`Coleta: ${feitas}/${total} páginas, ${registros.length} registros em ${decorrido()}${parcial ? " (PARCIAL)" : ""}`);
+  if (feitas < total * 0.5) throw new Error("Menos da metade das páginas veio. Abortando para não publicar dados muito incompletos.");
   return registros;
 }
 
@@ -224,6 +241,7 @@ async function main() {
   const gerado = agora.toISOString();
   await writeFile(path.join(OUT, "index.json"), JSON.stringify({
     gerado,
+    parcial,
     total: linhas.length,
     colunas: ["id", "uf", "municipio", "orgao", "objeto", "modalidade", "valor", "encerramento", "categoria", "srp", "publicacao", "esfera"],
     modalidades,
@@ -233,7 +251,7 @@ async function main() {
   for (const [uf, det] of Object.entries(porUF)) {
     await writeFile(path.join(OUT, "uf", `${uf}.json`), JSON.stringify(det));
   }
-  await writeFile(path.join(OUT, "meta.json"), JSON.stringify({ gerado, total: linhas.length, brutos: brutos.length }, null, 2));
+  await writeFile(path.join(OUT, "meta.json"), JSON.stringify({ gerado, parcial, total: linhas.length, brutos: brutos.length }, null, 2));
   console.log(`Pronto: ${linhas.length} licitações em aberto (de ${brutos.length} registros recebidos).`);
 }
 
