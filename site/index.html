@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Licitações Abertas</title>
+<meta name="description" content="Todas as licitações com propostas em aberto no Brasil, a partir do PNCP, atualizadas todos os dias.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Instrument+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topo">
+  <div class="topo-in">
+    <div class="marca">
+      <h1>Licitações Abertas</h1>
+      <p class="sub" id="status">Carregando licitações…</p>
+    </div>
+    <a class="fonte" href="https://pncp.gov.br" target="_blank" rel="noopener">Fonte: PNCP</a>
+  </div>
+</header>
+
+<section class="filtros" aria-label="Filtros">
+  <div class="filtros-in">
+    <label class="busca" for="q">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+      <input id="q" type="search" placeholder="Buscar por objeto, órgão ou cidade (ex.: merenda, ambulância, Campinas)" autocomplete="off">
+    </label>
+    <div class="selects">
+      <select id="f-uf" aria-label="Estado"><option value="">Todo o Brasil</option></select>
+      <select id="f-cat" aria-label="Área"><option value="">Todas as áreas</option></select>
+      <select id="f-mod" aria-label="Modalidade"><option value="">Todas as modalidades</option></select>
+      <select id="f-prazo" aria-label="Prazo">
+        <option value="">Qualquer prazo</option>
+        <option value="0">Encerra hoje</option>
+        <option value="3">Até 3 dias</option>
+        <option value="7">Até 7 dias</option>
+        <option value="30">Até 30 dias</option>
+        <option value="31+">Mais de 30 dias</option>
+      </select>
+      <select id="f-valor" aria-label="Valor estimado">
+        <option value="">Qualquer valor</option>
+        <option value="0-80000">Até R$ 80 mil</option>
+        <option value="80000-1000000">R$ 80 mil a 1 milhão</option>
+        <option value="1000000-10000000">R$ 1 a 10 milhões</option>
+        <option value="10000000-">Acima de R$ 10 milhões</option>
+        <option value="sem">Sem valor divulgado</option>
+      </select>
+      <select id="f-esfera" aria-label="Esfera">
+        <option value="">Todas as esferas</option>
+        <option value="M">Municipal</option>
+        <option value="E">Estadual</option>
+        <option value="F">Federal</option>
+        <option value="D">Distrital</option>
+      </select>
+      <select id="f-ordem" aria-label="Ordenar">
+        <option value="prazo">Encerra primeiro</option>
+        <option value="valor">Maior valor</option>
+        <option value="recentes">Publicadas recentemente</option>
+      </select>
+    </div>
+    <div class="contagem">
+      <span id="contagem"></span>
+      <button id="limpar" type="button" class="link" hidden>Limpar filtros</button>
+    </div>
+  </div>
+</section>
+
+<main class="lista-wrap">
+  <ol id="lista" class="lista" aria-live="polite"></ol>
+  <div id="vazio" class="vazio" hidden>
+    <p><strong>Nenhuma licitação encontrada.</strong></p>
+    <p>Tente outra palavra ou remova algum filtro.</p>
+  </div>
+  <button id="mais" type="button" class="mais" hidden>Mostrar mais</button>
+</main>
+
+<div id="painel-fundo" class="painel-fundo" hidden></div>
+<aside id="painel" class="painel" role="dialog" aria-modal="true" aria-labelledby="p-titulo" hidden>
+  <div class="painel-topo">
+    <span class="painel-eyebrow" id="p-eyebrow"></span>
+    <button id="fechar" type="button" class="fechar" aria-label="Fechar detalhes">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+  <div class="painel-corpo" id="p-corpo"></div>
+</aside>
+
+<footer class="rodape">
+  Dados públicos do <a href="https://pncp.gov.br" target="_blank" rel="noopener">Portal Nacional de Contratações Públicas</a>,
+  atualizados automaticamente todos os dias. Os resumos são gerados a partir dos dados do edital; confira sempre o documento oficial antes de participar.
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
