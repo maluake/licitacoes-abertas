@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Licitações Abertas</title>
-<meta name="description" content="Todas as licitações com propostas em aberto no Brasil, a partir do PNCP, atualizadas todos os dias.">
+<title>Licitações Abertas Sudeste</title>
+<meta name="description" content="Todas as licitações com propostas em aberto no Sudeste (SP, RJ, MG e ES), a partir do PNCP, atualizadas todos os dias.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Instrument+Sans:wght@400;500;600&display=swap">
@@ -14,7 +14,7 @@
 <header class="topo">
   <div class="topo-in">
     <div class="marca">
-      <h1>Licitações Abertas</h1>
+      <h1>Licitações Abertas <span class="regiao">Sudeste</span></h1>
       <p class="sub" id="status">Carregando licitações…</p>
     </div>
     <a class="fonte" href="https://pncp.gov.br" target="_blank" rel="noopener">Fonte: PNCP</a>
@@ -25,10 +25,21 @@
   <div class="filtros-in">
     <label class="busca" for="q">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-      <input id="q" type="search" placeholder="Buscar por objeto, órgão ou cidade (ex.: merenda, ambulância, Campinas)" autocomplete="off">
+      <input id="q" type="search" placeholder="Buscar por objeto ou órgão (ex.: merenda, uniforme, consultoria)" autocomplete="off">
     </label>
     <div class="selects">
-      <select id="f-uf" aria-label="Estado"><option value="">Todo o Brasil</option></select>
+      <select id="f-uf" aria-label="Estado"><option value="">Todo o Sudeste</option></select>
+      <span class="municipio">
+        <input id="f-mun" type="text" list="lista-mun" placeholder="Município" aria-label="Município" autocomplete="off">
+        <button id="f-mun-x" type="button" class="mini-x" aria-label="Limpar município" hidden>×</button>
+      </span>
+      <datalist id="lista-mun"></datalist>
+      <select id="f-facil" aria-label="Facilidade">
+        <option value="">Qualquer facilidade</option>
+        <option value="Acessível">Acessível (pouca estrutura)</option>
+        <option value="Moderada">Moderada</option>
+        <option value="Exige estrutura">Exige estrutura</option>
+      </select>
       <select id="f-cat" aria-label="Área"><option value="">Todas as áreas</option></select>
       <select id="f-mod" aria-label="Modalidade"><option value="">Todas as modalidades</option></select>
       <select id="f-prazo" aria-label="Prazo">
@@ -58,12 +69,26 @@
         <option value="prazo">Encerra primeiro</option>
         <option value="valor">Maior valor</option>
         <option value="recentes">Publicadas recentemente</option>
+        <option value="facil">Mais acessíveis primeiro</option>
       </select>
     </div>
-    <div class="contagem">
-      <span id="contagem"></span>
-      <button id="limpar" type="button" class="link" hidden>Limpar filtros</button>
+    <div class="barra">
+      <div class="contagem">
+        <span id="contagem"></span>
+        <button id="limpar" type="button" class="link" hidden>Limpar filtros</button>
+      </div>
+      <div class="barra-acoes">
+        <button id="so-fav" type="button" class="pilula" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>
+          <span>Favoritas <b id="n-fav">0</b></span>
+        </button>
+        <button id="baixar" type="button" class="pilula">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14"/></svg>
+          <span>Baixar planilha</span>
+        </button>
+      </div>
     </div>
+    <div id="medias" class="medias" aria-live="polite"></div>
   </div>
 </section>
 
@@ -71,7 +96,7 @@
   <ol id="lista" class="lista" aria-live="polite"></ol>
   <div id="vazio" class="vazio" hidden>
     <p><strong>Nenhuma licitação encontrada.</strong></p>
-    <p>Tente outra palavra ou remova algum filtro.</p>
+    <p id="vazio-dica">Tente outra palavra ou remova algum filtro.</p>
   </div>
   <button id="mais" type="button" class="mais" hidden>Mostrar mais</button>
 </main>
@@ -89,7 +114,7 @@
 
 <footer class="rodape">
   Dados públicos do <a href="https://pncp.gov.br" target="_blank" rel="noopener">Portal Nacional de Contratações Públicas</a>,
-  atualizados automaticamente todos os dias. Os resumos são gerados a partir dos dados do edital; confira sempre o documento oficial antes de participar.
+  atualizados automaticamente todos os dias. Os resumos e a nota de facilidade são estimativas automáticas feitas a partir dos dados do edital; confira sempre o documento oficial antes de participar.
 </footer>
 
 <script src="app.js"></script>

@@ -34,6 +34,7 @@ jobs:
         run: node scripts/coletar.mjs
         env:
           TEMPO_MAX_MIN: "50"
+          UFS: "SP,RJ,MG,ES"   # estados coletados (Sudeste)
 
       - uses: actions/configure-pages@v5
 

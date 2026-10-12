@@ -1,9 +1,12 @@
-# Licitações Abertas
+# Licitações Abertas Sudeste
 
-Site com todas as licitações do Brasil que estão com recebimento de propostas em aberto, a partir da API oficial do
+Site com todas as licitações de SP, RJ, MG e ES que estão com recebimento de propostas em aberto, a partir da API oficial do
 [PNCP — Portal Nacional de Contratações Públicas](https://pncp.gov.br/api/consulta/swagger-ui/index.html).
 
-- Lista todas as licitações abertas, do país inteiro, com busca e filtros (estado, área, modalidade, prazo, valor, esfera).
+- Lista todas as licitações abertas do Sudeste, com busca e filtros (estado, município, área, modalidade, prazo, valor, esfera, facilidade).
+- Favoritos (guardados no navegador) e botão para baixar a lista filtrada em Excel.
+- Nota de facilidade (0 a 100): estimativa de quanto a licitação pode ser atendida sem grande estrutura, com os motivos.
+- Para incluir outros estados, edite `UFS` em `.github/workflows/atualizar.yml` (ex.: `"SP,RJ,MG,ES,PR"`).
 - Ao clicar, mostra os detalhes, um resumo em linguagem simples e o link para o edital e anexos no PNCP.
 - Atualiza sozinho todos os dias às 06:17 (horário de Brasília) pelo GitHub Actions e publica no GitHub Pages.
 

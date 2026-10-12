@@ -15,6 +15,8 @@ const API = "https://pncp.gov.br/api/consulta/v1/contratacoes/proposta";
 const TAMANHO = 50;          // máximo aceito pela API
 const PARALELO = 8;          // requisições simultâneas
 const OUT = path.resolve("site/data");
+// Estados coletados (Sudeste). Para mudar, ajuste a variável UFS no workflow, ex.: "SP,RJ,MG,ES,PR".
+const UFS = (process.env.UFS || "SP,RJ,MG,ES").split(",").map((u) => u.trim().toUpperCase()).filter(Boolean);
 
 // ---------- utilidades ----------
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -25,8 +27,8 @@ const LIMITE_MS = (Number(process.env.TEMPO_MAX_MIN) || 50) * 60000; // para de 
 const decorrido = () => `${Math.round((Date.now() - INICIO) / 1000)}s`;
 let parcial = false;
 
-async function baixarPagina(pagina, dataFinal, tentativas = 4) {
-  const url = `${API}?dataFinal=${dataFinal}&pagina=${pagina}&tamanhoPagina=${TAMANHO}`;
+async function baixarPagina({ uf, pagina }, dataFinal, tentativas = 4) {
+  const url = `${API}?dataFinal=${dataFinal}&uf=${uf}&pagina=${pagina}&tamanhoPagina=${TAMANHO}`;
   for (let t = 1; t <= tentativas; t++) {
     try {
       const r = await fetch(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(30000) });
@@ -35,7 +37,7 @@ async function baixarPagina(pagina, dataFinal, tentativas = 4) {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return await r.json();
     } catch (e) {
-      if (t === tentativas) { console.error(`Página ${pagina} falhou: ${e.message}`); return null; }
+      if (t === tentativas) { console.error(`${uf} página ${pagina} falhou: ${e.message}`); return null; }
       await sleep(1000 * t * t);
     }
   }
@@ -52,24 +54,28 @@ async function coletarTudo() {
   fim.setFullYear(fim.getFullYear() + 5);
   const dataFinal = ymd(fim);
 
-  const primeira = await baixarPagina(1, dataFinal, 8);
-  if (!primeira) throw new Error("Não foi possível acessar a API do PNCP.");
-  const total = primeira.totalPaginas || 1;
-  console.log(`PNCP: ${primeira.totalRegistros} registros em ${total} páginas (${decorrido()})`);
-
-  const registros = [...(primeira.data || [])];
-  const pendentes = Array.from({ length: total - 1 }, (_, i) => i + 2);
-  let feitas = 1;
+  const registros = [];
+  const pendentes = [];
+  let total = 0, feitas = 0;
+  for (const uf of UFS) {
+    const primeira = await baixarPagina({ uf, pagina: 1 }, dataFinal, 8);
+    if (!primeira) throw new Error(`Não foi possível acessar a API do PNCP (${uf}).`);
+    const paginas = primeira.totalPaginas || 1;
+    console.log(`${uf}: ${primeira.totalRegistros} registros em ${paginas} páginas (${decorrido()})`);
+    registros.push(...(primeira.data || []));
+    total += paginas; feitas++;
+    for (let p = 2; p <= paginas; p++) pendentes.push({ uf, pagina: p });
+  }
 
   async function rodada(fila, tentativas) {
     const falhas = [];
     async function trabalhador() {
       while (fila.length) {
         if (Date.now() - INICIO > LIMITE_MS) { parcial = true; return; }
-        const p = fila.shift();
-        const j = await baixarPagina(p, dataFinal, tentativas);
+        const t = fila.shift();
+        const j = await baixarPagina(t, dataFinal, tentativas);
         if (j) { registros.push(...(j.data || [])); feitas++; }
-        else falhas.push(p);
+        else falhas.push(t);
         if (feitas % 50 === 0) console.log(`  ${feitas}/${total} páginas · ${registros.length} registros · ${decorrido()}`);
       }
     }
@@ -119,7 +125,7 @@ function titulo(nome) {
   return n.toLowerCase().split(" ").map((w, i, a) => (i > 0 && i < a.length - 1 && pequenas.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(" ");
 }
 
-const semAcento = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const semAcento = (s) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
 // ---------- categorias (palavras-chave no objeto) ----------
 const CATEGORIAS = [
@@ -149,6 +155,64 @@ function curto(s, n) {
   return (esp > n * 0.6 ? corte.slice(0, esp) : corte).replace(/[,;:\s]+$/, "") + "…";
 }
 
+// ---------- facilidade: dá para atender sem grande estrutura? ----------
+// Estimativa por regras simples (valor, modalidade, área e palavras do objeto). Nota de 0 a 100.
+const EXIGE = [
+  [/\bobras?\b|engenharia|paviment|construc|edifica|terraplen|drenagem|recapeamento|saneamento/, "Obra ou serviço de engenharia (pede responsável técnico, equipe e equipamentos)"],
+  [/mao de obra|dedicacao exclusiva|postos? de trabalho|terceiriz/, "Mão de obra dedicada (exige funcionários contratados para o órgão)"],
+  [/vigilancia|seguranca patrimonial/, "Vigilância (atividade com autorização da Polícia Federal)"],
+  [/coleta de (lixo|residuos)|residuos solidos|aterro/, "Coleta de resíduos (frota e licenças ambientais)"],
+  [/transporte escolar|transporte de passageiros|fretamento|onibus/, "Transporte de pessoas (frota e motoristas habilitados)"],
+  [/hospitalar|plantao|plantoes|\buti\b|hemodialise|cirurg|exames? de imagem|tomografia|ressonancia/, "Serviço de saúde especializado (estrutura clínica e profissionais habilitados)"],
+  [/locacao de (maquinas|veiculos|equipamentos pesados)|maquinas pesadas|caminh(ao|oes)/, "Máquinas ou veículos pesados"],
+  [/combustive|gas liquefeito|\bglp\b/, "Combustíveis (exige autorização da ANP)"],
+  [/medicament|farmac/, "Medicamentos (exige licença sanitária e autorização da Anvisa)"],
+];
+const ACESSIVEL = [
+  [/material de expediente|papelaria|materia(l|is) de (consumo|limpeza|escritorio)|copa e cozinha|descartave/, "Fornecimento de materiais comuns"],
+  [/brinde|camiseta|uniforme|fardamento|bandeira|trofeu|medalha/, "Itens personalizados ou confecção"],
+  [/grafic|impress(o|ao) de|banner|placas? de sinaliz/, "Serviços gráficos"],
+  [/consultoria|assessoria|capacitac|treinamento|palestra|curso/, "Serviço intelectual (consultoria ou treinamento)"],
+  [/software|licenca|sistema informatizado|site|aplicativo|suporte tecnico/, "Tecnologia ou software"],
+  [/genero alimenticio|aliment|lanche|coffee break|hortifrut|cesta basica/, "Fornecimento de alimentos"],
+  [/evento|show|apresentac|artist|sonorizac|decorac/, "Eventos ou apresentações"],
+  [/mobili|eletrodomest|equipamentos? de informatica|notebook|computador|ar condicionado/, "Revenda de equipamentos"],
+];
+function facilidade(r, catNome) {
+  let nota = 50;
+  const motivos = [];
+  const t = semAcento(`${r.objetoCompra || ""} ${r.informacaoComplementar || ""}`);
+  const v = typeof r.valorTotalEstimado === "number" && r.valorTotalEstimado > 1 ? r.valorTotalEstimado : null;
+  const m = semAcento(r.modalidadeNome || "");
+
+  if (v == null) motivos.push(["neutro", "Valor estimado não divulgado"]);
+  else if (v <= 80000) { nota += 25; motivos.push(["bom", "Valor até R$ 80 mil (faixa em que a lei costuma reservar a disputa a micro e pequenas empresas)"]); }
+  else if (v <= 500000) { nota += 12; motivos.push(["bom", "Valor moderado (até R$ 500 mil)"]); }
+  else if (v <= 3000000) { motivos.push(["neutro", "Valor médio (até R$ 3 milhões)"]); }
+  else if (v <= 15000000) { nota -= 18; motivos.push(["ruim", "Valor alto (acima de R$ 3 milhões costuma exigir garantia e capacidade financeira)"]); }
+  else { nota -= 30; motivos.push(["ruim", "Valor muito alto (acima de R$ 15 milhões)"]); }
+
+  if (/dispensa/.test(m)) { nota += 15; motivos.push(["bom", "Dispensa: processo simples e rápido"]); }
+  else if (/credenciamento/.test(m)) { nota += 8; motivos.push(["bom", "Credenciamento: sem disputa de preço, basta cumprir os requisitos"]); }
+  else if (/pregao/.test(m)) { nota += 4; motivos.push(["neutro", "Pregão: disputa por preço com documentação padrão"]); }
+  else if (/concorrencia/.test(m)) { nota -= 15; motivos.push(["ruim", "Concorrência: modalidade de contratações complexas"]); }
+  else if (/inexigibilidade/.test(m)) { nota -= 30; motivos.push(["ruim", "Inexigibilidade: normalmente já tem fornecedor definido"]); }
+  else if (/dialogo|pre-?qualificacao/.test(m)) { nota -= 15; motivos.push(["ruim", "Modalidade com seleção prévia de empresas"]); }
+
+  let exige = 0;
+  for (const [re, txt] of EXIGE) if (re.test(t) && exige < 2) { nota -= 20; exige++; motivos.push(["ruim", txt]); }
+  if (!exige) {
+    const ac = ACESSIVEL.find(([re]) => re.test(t));
+    if (ac) { nota += 12; motivos.push(["bom", ac[1]]); }
+  }
+  if (r.srp) { nota += 4; motivos.push(["bom", "Registro de preços: entregas sob demanda, em lotes menores"]); }
+  if (exige) nota = Math.min(nota, 35); // atividade que por natureza pede estrutura própria
+
+  nota = Math.max(0, Math.min(100, Math.round(nota)));
+  return { nota, motivos };
+}
+const nivelFacil = (n) => (n >= 65 ? "Acessível" : n >= 40 ? "Moderada" : "Exige estrutura");
+
 // ---------- montagem ----------
 async function main() {
   const brutos = await coletarTudo();
@@ -162,6 +226,7 @@ async function main() {
     const id = r.numeroControlePNCP;
     if (!id || vistos.has(id)) continue;
     if (!r.dataEncerramentoProposta) continue;
+    if (!UFS.includes(r.unidadeOrgao?.ufSigla)) continue;
     if (new Date(r.dataEncerramentoProposta) < hojeBR) continue;
     vistos.add(id);
     lista.push(r);
@@ -186,6 +251,7 @@ async function main() {
     const orgao = titulo(o.razaoSocial);
     const unidade = titulo(u.nomeUnidade);
     const cat = categoria(r.objetoCompra + " " + (r.informacaoComplementar || ""));
+    const fac = facilidade(r, nomesCategorias[cat]);
     const valor = typeof r.valorTotalEstimado === "number" && r.valorTotalEstimado > 1 ? Math.round(r.valorTotalEstimado * 100) / 100 : null;
 
     linhas.push([
@@ -201,6 +267,7 @@ async function main() {
       r.srp ? 1 : 0,
       (r.dataPublicacaoPncp || "").slice(0, 10),
       o.esferaId || "",
+      fac.nota,
     ]);
 
     (porUF[uf] ||= {})[r.numeroControlePNCP] = {
@@ -233,6 +300,7 @@ async function main() {
       esfera: o.esferaId,
       poder: o.poderId,
       categoria: nomesCategorias[cat],
+      facil: { nota: fac.nota, nivel: nivelFacil(fac.nota), motivos: fac.motivos },
     };
   }
 
@@ -242,8 +310,9 @@ async function main() {
   await writeFile(path.join(OUT, "index.json"), JSON.stringify({
     gerado,
     parcial,
+    ufs: UFS,
     total: linhas.length,
-    colunas: ["id", "uf", "municipio", "orgao", "objeto", "modalidade", "valor", "encerramento", "categoria", "srp", "publicacao", "esfera"],
+    colunas: ["id", "uf", "municipio", "orgao", "objeto", "modalidade", "valor", "encerramento", "categoria", "srp", "publicacao", "esfera", "facilidade"],
     modalidades,
     categorias: nomesCategorias,
     linhas,

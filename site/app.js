@@ -1,20 +1,18 @@
 "use strict";
 
-const UFS = {
-  AC: "Acre", AL: "Alagoas", AP: "Amapá", AM: "Amazonas", BA: "Bahia", CE: "Ceará", DF: "Distrito Federal",
-  ES: "Espírito Santo", GO: "Goiás", MA: "Maranhão", MT: "Mato Grosso", MS: "Mato Grosso do Sul", MG: "Minas Gerais",
-  PA: "Pará", PB: "Paraíba", PR: "Paraná", PE: "Pernambuco", PI: "Piauí", RJ: "Rio de Janeiro", RN: "Rio Grande do Norte",
-  RS: "Rio Grande do Sul", RO: "Rondônia", RR: "Roraima", SC: "Santa Catarina", SP: "São Paulo", SE: "Sergipe", TO: "Tocantins",
-};
+const UFS = { ES: "Espírito Santo", MG: "Minas Gerais", RJ: "Rio de Janeiro", SP: "São Paulo" };
 const ESFERAS = { M: "Municipal", E: "Estadual", F: "Federal", D: "Distrital", N: "Não informada" };
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const POR_PAGINA = 60;
+const FILTROS = ["uf", "mun", "cat", "mod", "prazo", "valor", "esfera", "facil"];
 
 const $ = (s) => document.getElementById(s);
 const el = {
-  status: $("status"), q: $("q"), uf: $("f-uf"), cat: $("f-cat"), mod: $("f-mod"), prazo: $("f-prazo"),
-  valor: $("f-valor"), esfera: $("f-esfera"), ordem: $("f-ordem"), contagem: $("contagem"), limpar: $("limpar"),
-  lista: $("lista"), vazio: $("vazio"), mais: $("mais"),
+  status: $("status"), q: $("q"), uf: $("f-uf"), mun: $("f-mun"), munX: $("f-mun-x"), listaMun: $("lista-mun"),
+  cat: $("f-cat"), mod: $("f-mod"), prazo: $("f-prazo"), valor: $("f-valor"), esfera: $("f-esfera"), facil: $("f-facil"),
+  ordem: $("f-ordem"), contagem: $("contagem"), limpar: $("limpar"), medias: $("medias"),
+  soFav: $("so-fav"), nFav: $("n-fav"), baixar: $("baixar"),
+  lista: $("lista"), vazio: $("vazio"), vazioDica: $("vazio-dica"), mais: $("mais"),
   painel: $("painel"), fundo: $("painel-fundo"), corpo: $("p-corpo"), eyebrow: $("p-eyebrow"), fechar: $("fechar"),
 };
 
@@ -24,6 +22,7 @@ let filtradas = [];
 let mostrando = 0;
 const cacheUF = {};
 let ultimoFoco = null;
+let soFavoritas = false;
 
 // ---------- formatação ----------
 const semAcento = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -54,6 +53,37 @@ function textoFalta(dias) {
 function classeFalta(dias) { return dias <= 2 ? "urg" : dias <= 7 ? "breve" : ""; }
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+// facilidade: dá para atender sem grande estrutura?
+const nivelFacil = (n) => (n >= 65 ? "Acessível" : n >= 40 ? "Moderada" : "Exige estrutura");
+const corFacil = (n) => (n >= 65 ? "var(--easy)" : n >= 40 ? "var(--mid)" : "var(--hard)");
+
+// ---------- favoritos (ficam só neste navegador) ----------
+const ESTRELA = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>';
+let favoritos = new Set();
+try { favoritos = new Set(JSON.parse(localStorage.getItem("favoritos") || "[]")); } catch (e) {}
+function salvarFavoritos() { try { localStorage.setItem("favoritos", JSON.stringify([...favoritos])); } catch (e) {} }
+function contarFavoritos() {
+  const n = linhas.filter((l) => favoritos.has(l.id)).length;
+  el.nFav.textContent = n.toLocaleString("pt-BR");
+}
+function alternarFavorito(id) {
+  if (favoritos.has(id)) favoritos.delete(id); else favoritos.add(id);
+  salvarFavoritos();
+  const on = favoritos.has(id);
+  document.querySelectorAll(`[data-fav="${CSS.escape(id)}"]`).forEach((b) => {
+    b.setAttribute("aria-pressed", on);
+    b.setAttribute("aria-label", on ? "Remover dos favoritos" : "Salvar nos favoritos");
+    b.title = on ? "Remover dos favoritos" : "Salvar nos favoritos";
+  });
+  contarFavoritos();
+  if (soFavoritas && !on) aplicar();
+}
+function botaoEstrela(id, extra = "") {
+  const on = favoritos.has(id);
+  const rotulo = on ? "Remover dos favoritos" : "Salvar nos favoritos";
+  return `<button type="button" class="estrela ${extra}" data-fav="${esc(id)}" aria-pressed="${on}" aria-label="${rotulo}" title="${rotulo}">${ESTRELA}</button>`;
+}
+
 // ---------- carga ----------
 async function carregar() {
   el.lista.innerHTML = Array.from({ length: 8 }, () => '<li class="esqueleto"></li>').join("");
@@ -66,35 +96,61 @@ async function carregar() {
     el.status.textContent = "Não foi possível carregar os dados. Recarregue a página em alguns instantes.";
     return;
   }
-  linhas = base.linhas.map((l) => ({
-    id: l[0], uf: l[1], municipio: l[2], orgao: l[3], objeto: l[4], mod: l[5], valor: l[6],
-    enc: l[7], cat: l[8], srp: l[9], pub: l[10], esfera: l[11],
-    busca: semAcento(`${l[4]} ${l[3]} ${l[2]} ${l[1]} ${UFS[l[1]] || ""}`),
-  }));
+  linhas = base.linhas
+    .filter((l) => UFS[l[1]])
+    .map((l) => ({
+      id: l[0], uf: l[1], municipio: l[2], orgao: l[3], objeto: l[4], mod: l[5], valor: l[6],
+      enc: l[7], cat: l[8], srp: l[9], pub: l[10], esfera: l[11], facil: l[12] ?? 50,
+      munChave: semAcento(l[2] || ""),
+      busca: semAcento(`${l[4]} ${l[3]} ${l[2]} ${l[1]} ${UFS[l[1]] || ""}`),
+    }));
   const gerado = new Date(base.gerado);
-  el.status.innerHTML = `<b>${base.total.toLocaleString("pt-BR")}</b> licitações com propostas abertas · atualizado em ${gerado.toLocaleDateString("pt-BR")} às ${gerado.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}${base.parcial ? " · a API do governo estava lenta e parte da lista pode faltar hoje" : ""}`;
+  el.status.innerHTML = `<b>${linhas.length.toLocaleString("pt-BR")}</b> licitações com propostas abertas em SP, RJ, MG e ES · atualizado em ${gerado.toLocaleDateString("pt-BR")} às ${gerado.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}${base.parcial ? " · a API do governo estava lenta e parte da lista pode faltar hoje" : ""}`;
 
   const contaUF = {};
   linhas.forEach((l) => (contaUF[l.uf] = (contaUF[l.uf] || 0) + 1));
-  Object.keys(UFS).sort((a, b) => UFS[a].localeCompare(UFS[b])).forEach((uf) => {
+  Object.keys(UFS).forEach((uf) => {
     if (contaUF[uf]) el.uf.add(new Option(`${UFS[uf]} (${contaUF[uf].toLocaleString("pt-BR")})`, uf));
   });
   base.categorias.forEach((c, i) => el.cat.add(new Option(c, i)));
   base.modalidades.map((m, i) => [m, i]).sort((a, b) => a[0].localeCompare(b[0])).forEach(([m, i]) => el.mod.add(new Option(m, i)));
 
   restaurarFiltros();
+  montarMunicipios();
+  contarFavoritos();
   aplicar();
   abrirDoEndereco();
 }
 
+// lista de municípios do estado escolhido (ou do Sudeste inteiro), com quantidade
+function montarMunicipios() {
+  const uf = el.uf.value;
+  const conta = new Map();
+  for (const l of linhas) {
+    if (uf && l.uf !== uf) continue;
+    const k = `${l.municipio} – ${l.uf}`;
+    conta.set(k, (conta.get(k) || 0) + 1);
+  }
+  el.listaMun.innerHTML = [...conta.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], "pt-BR"))
+    .map(([k, n]) => `<option value="${esc(k)}">${n} ${n === 1 ? "licitação" : "licitações"}</option>`).join("");
+}
+// "Campinas – SP" → {nome:"campinas", uf:"SP"}; aceita também só o nome digitado
+function lerMunicipio() {
+  const v = el.mun.value.trim();
+  if (!v) return null;
+  const m = v.match(/^(.*?)\s*[–-]\s*([A-Za-z]{2})$/);
+  return m ? { nome: semAcento(m[1]), uf: m[2].toUpperCase() } : { nome: semAcento(v), uf: null };
+}
+
 // ---------- filtros ----------
-const CAMPOS = ["q", "uf", "cat", "mod", "prazo", "valor", "esfera", "ordem"];
+const CAMPOS = ["q", "uf", "mun", "cat", "mod", "prazo", "valor", "esfera", "facil", "ordem"];
 function salvarFiltros() {
-  try { localStorage.setItem("filtros", JSON.stringify(Object.fromEntries(CAMPOS.map((c) => [c, el[c].value])))); } catch (e) {}
+  try { localStorage.setItem("filtros-se", JSON.stringify(Object.fromEntries(CAMPOS.map((c) => [c, el[c].value])))); } catch (e) {}
 }
 function restaurarFiltros() {
   try {
-    const f = JSON.parse(localStorage.getItem("filtros") || "{}");
+    const f = JSON.parse(localStorage.getItem("filtros-se") || "{}");
     CAMPOS.forEach((c) => {
       if (f[c] == null) return;
       if (el[c].tagName === "SELECT" && ![...el[c].options].some((o) => o.value === f[c])) return;
@@ -105,17 +161,21 @@ function restaurarFiltros() {
 
 function aplicar() {
   const termos = semAcento(el.q.value.trim()).split(/\s+/).filter(Boolean);
-  const uf = el.uf.value, cat = el.cat.value, mod = el.mod.value, esfera = el.esfera.value;
+  const uf = el.uf.value, cat = el.cat.value, mod = el.mod.value, esfera = el.esfera.value, facil = el.facil.value;
   const prazo = el.prazo.value, valor = el.valor.value;
+  const mun = lerMunicipio();
   let vmin = null, vmax = null;
   if (valor && valor !== "sem") { const [a, b] = valor.split("-"); vmin = +a; vmax = b ? +b : Infinity; }
   const hoje = diaIdx(agoraBR());
 
   filtradas = linhas.filter((l) => {
+    if (soFavoritas && !favoritos.has(l.id)) return false;
     if (uf && l.uf !== uf) return false;
+    if (mun && (l.munChave !== mun.nome || (mun.uf && l.uf !== mun.uf))) return false;
     if (cat !== "" && l.cat !== +cat) return false;
     if (mod !== "" && l.mod !== +mod) return false;
     if (esfera && l.esfera !== esfera) return false;
+    if (facil && nivelFacil(l.facil) !== facil) return false;
     if (valor === "sem" && l.valor != null) return false;
     if (vmin != null && (l.valor == null || l.valor < vmin || l.valor >= vmax)) return false;
     if (prazo) {
@@ -129,27 +189,57 @@ function aplicar() {
   const o = el.ordem.value;
   if (o === "valor") filtradas.sort((a, b) => (b.valor ?? -1) - (a.valor ?? -1));
   else if (o === "recentes") filtradas.sort((a, b) => b.pub.localeCompare(a.pub) || a.enc.localeCompare(b.enc));
+  else if (o === "facil") filtradas.sort((a, b) => b.facil - a.facil || a.enc.localeCompare(b.enc));
   else filtradas.sort((a, b) => a.enc.localeCompare(b.enc));
 
-  ["uf", "cat", "mod", "prazo", "valor", "esfera"].forEach((c) => el[c].classList.toggle("ativo", el[c].value !== ""));
-  const temFiltro = termos.length || ["uf", "cat", "mod", "prazo", "valor", "esfera"].some((c) => el[c].value !== "");
+  FILTROS.forEach((c) => el[c].classList.toggle("ativo", el[c].value !== ""));
+  el.munX.hidden = !el.mun.value;
+  const temFiltro = termos.length || soFavoritas || FILTROS.some((c) => el[c].value !== "");
   el.limpar.hidden = !temFiltro;
+  el.soFav.setAttribute("aria-pressed", soFavoritas);
   const soma = filtradas.reduce((s, l) => s + (l.valor || 0), 0);
   el.contagem.textContent = temFiltro
     ? `${filtradas.length.toLocaleString("pt-BR")} encontradas · ${brlCurto(soma)} em valor estimado`
     : `Mostrando todas · ${brlCurto(soma)} em valor estimado`;
+  mostrarMedias();
 
   el.lista.innerHTML = "";
   mostrando = 0;
   maisItens();
   el.vazio.hidden = filtradas.length > 0;
+  el.vazioDica.textContent = soFavoritas && !favoritos.size
+    ? "Você ainda não salvou nenhuma. Toque na estrela de uma licitação para guardá-la aqui."
+    : "Tente outra palavra ou remova algum filtro.";
   salvarFiltros();
+}
+
+// médias da seleção atual: facilidade, proporção por nível e valor típico
+function mostrarMedias() {
+  const n = filtradas.length;
+  if (!n) { el.medias.innerHTML = ""; return; }
+  let soma = 0; const niv = { "Acessível": 0, "Moderada": 0, "Exige estrutura": 0 };
+  const valores = [];
+  for (const l of filtradas) {
+    soma += l.facil; niv[nivelFacil(l.facil)]++;
+    if (l.valor != null) valores.push(l.valor);
+  }
+  valores.sort((a, b) => a - b);
+  const mediana = valores.length ? valores[Math.floor(valores.length / 2)] : null;
+  const media = Math.round(soma / n);
+  const pct = (k) => Math.round((niv[k] / n) * 100);
+  el.medias.innerHTML = `
+    <span class="seg">Facilidade média <b>${media}/100</b> (${esc(nivelFacil(media).toLowerCase())})</span>
+    <span class="seg"><span class="barrinha" title="Acessível ${pct("Acessível")}% · Moderada ${pct("Moderada")}% · Exige estrutura ${pct("Exige estrutura")}%">
+      <i style="width:${pct("Acessível")}%;background:var(--easy)"></i><i style="width:${pct("Moderada")}%;background:var(--mid)"></i><i style="width:${pct("Exige estrutura")}%;background:var(--hard)"></i>
+    </span><b>${niv["Acessível"].toLocaleString("pt-BR")}</b> acessíveis sem grande estrutura (${pct("Acessível")}%)</span>
+    ${mediana != null ? `<span class="seg">Valor típico <b>${brlCurto(mediana)}</b></span>` : ""}`;
 }
 
 function linhaHTML(l) {
   const d = new Date(tBR(l.enc));
   const dias = diasRestantes(l.enc);
   const modNome = base.modalidades[l.mod];
+  const nivel = nivelFacil(l.facil);
   return `<li class="item" tabindex="0" data-id="${esc(l.id)}">
     <div class="prazo">
       <div class="dia">${d.getUTCDate()} ${MESES[d.getUTCMonth()]}</div>
@@ -159,9 +249,10 @@ function linhaHTML(l) {
     <div class="meio">
       <p class="objeto">${esc(l.objeto)}</p>
       <p class="orgao"><b>${esc(l.orgao)}</b> · ${esc(l.municipio)}/${esc(l.uf)}</p>
-      <div class="tags"><span class="tag">${esc(modNome)}</span><span class="tag">${esc(base.categorias[l.cat])}</span>${l.srp ? '<span class="tag">Registro de preços</span>' : ""}</div>
+      <div class="tags"><span class="tag f-${nivel.split(" ")[0]}" title="Facilidade ${l.facil}/100">${esc(nivel)}</span><span class="tag">${esc(modNome)}</span><span class="tag">${esc(base.categorias[l.cat])}</span>${l.srp ? '<span class="tag">Registro de preços</span>' : ""}</div>
     </div>
     <div class="valor">${l.valor != null ? `<div class="v">${brlCurto(l.valor)}</div><div class="vl">estimado</div>` : '<div class="nd">valor não divulgado</div>'}</div>
+    ${botaoEstrela(l.id)}
   </li>`;
 }
 
@@ -175,15 +266,92 @@ function maisItens() {
 
 let espera;
 el.q.addEventListener("input", () => { clearTimeout(espera); espera = setTimeout(aplicar, 180); });
-["uf", "cat", "mod", "prazo", "valor", "esfera", "ordem"].forEach((c) => el[c].addEventListener("change", aplicar));
+["cat", "mod", "prazo", "valor", "esfera", "facil", "ordem"].forEach((c) => el[c].addEventListener("change", aplicar));
+el.uf.addEventListener("change", () => {
+  const mun = lerMunicipio();
+  if (mun && mun.uf && el.uf.value && mun.uf !== el.uf.value) el.mun.value = "";
+  montarMunicipios(); aplicar();
+});
+el.mun.addEventListener("change", aplicar);
+el.mun.addEventListener("input", () => { if (!el.mun.value) aplicar(); });
+el.munX.addEventListener("click", () => { el.mun.value = ""; aplicar(); el.mun.focus(); });
+el.soFav.addEventListener("click", () => { soFavoritas = !soFavoritas; aplicar(); });
 el.limpar.addEventListener("click", () => {
-  el.q.value = ""; ["uf", "cat", "mod", "prazo", "valor", "esfera"].forEach((c) => (el[c].value = ""));
-  aplicar();
+  el.q.value = ""; FILTROS.forEach((c) => (el[c].value = ""));
+  soFavoritas = false;
+  montarMunicipios(); aplicar();
 });
 el.mais.addEventListener("click", maisItens);
 if ("IntersectionObserver" in window) {
   new IntersectionObserver((ents) => { if (ents[0].isIntersecting && !el.mais.hidden) maisItens(); }, { rootMargin: "600px" }).observe(el.mais);
 }
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-fav]");
+  if (b) { e.stopPropagation(); alternarFavorito(b.dataset.fav); }
+}, true);
+
+// ---------- planilha (Excel) da lista filtrada ----------
+function carregarScript(src) {
+  return new Promise((ok, erro) => {
+    const s = document.createElement("script");
+    s.src = src; s.onload = ok; s.onerror = erro;
+    document.head.appendChild(s);
+  });
+}
+el.baixar.addEventListener("click", async () => {
+  if (!filtradas.length) return;
+  const rotulo = el.baixar.querySelector("span");
+  const original = rotulo.textContent;
+  el.baixar.disabled = true; rotulo.textContent = "Preparando…";
+  try {
+    const ufs = [...new Set(filtradas.map((l) => l.uf))];
+    const det = Object.assign({}, ...(await Promise.all(ufs.map((u) => detalhesUF(u).catch(() => ({}))))));
+    const linhasPlan = filtradas.map((l) => {
+      const d = det[l.id] || {};
+      return {
+        "Encerramento": dataHora(l.enc),
+        "Dias restantes": Math.max(0, diasRestantes(l.enc)),
+        "Objeto": d.objeto || l.objeto,
+        "Órgão": d.orgao || l.orgao,
+        "Município": l.municipio,
+        "UF": l.uf,
+        "Esfera": ESFERAS[l.esfera] || "",
+        "Modalidade": base.modalidades[l.mod],
+        "Área": base.categorias[l.cat],
+        "Valor estimado (R$)": l.valor ?? "",
+        "Facilidade (0-100)": l.facil,
+        "Nível": nivelFacil(l.facil),
+        "Registro de preços": l.srp ? "Sim" : "Não",
+        "Plataforma da disputa": d.plataforma || "",
+        "Favorita": favoritos.has(l.id) ? "Sim" : "",
+        "Link PNCP": d.cnpj ? linkPNCP(d) : "",
+        "Link da disputa": d.linkEletronico || d.linkOrigem || "",
+        "Código PNCP": l.id,
+      };
+    });
+    const nome = `licitacoes-sudeste-${new Date().toISOString().slice(0, 10)}`;
+    try {
+      if (!window.XLSX) await carregarScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");
+      const ws = XLSX.utils.json_to_sheet(linhasPlan);
+      ws["!cols"] = [14, 8, 70, 40, 22, 5, 11, 22, 22, 16, 10, 15, 10, 26, 8, 45, 45, 30].map((w) => ({ wch: w }));
+      ws["!autofilter"] = { ref: ws["!ref"] };
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Licitações");
+      XLSX.writeFile(wb, `${nome}.xlsx`);
+    } catch (e) {
+      // sem a biblioteca, entrega CSV (abre no Excel do mesmo jeito)
+      const cab = Object.keys(linhasPlan[0]);
+      const cel = (v) => `"${String(v).replace(/"/g, '""')}"`;
+      const csv = "﻿" + [cab.map(cel).join(";"), ...linhasPlan.map((r) => cab.map((k) => cel(r[k])).join(";"))].join("\r\n");
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      a.download = `${nome}.csv`; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    }
+  } finally {
+    el.baixar.disabled = false; rotulo.textContent = original;
+  }
+});
 
 // ---------- detalhes ----------
 el.lista.addEventListener("click", (e) => { const li = e.target.closest(".item"); if (li) abrir(li.dataset.id); });
@@ -262,8 +430,9 @@ function painelHTML(l, d) {
   const origem = d.linkEletronico || d.linkOrigem;
   return `
     <h2 id="p-titulo">${esc(d.objeto)}</h2>
-    <div class="prazo-grande"><span class="falta ${classeFalta(dias)}">${textoFalta(dias)}</span><strong>Propostas até ${dataHora(d.encerramento)}</strong></div>
+    <div class="prazo-grande"><span class="falta ${classeFalta(dias)}">${textoFalta(dias)}</span><strong>Propostas até ${dataHora(d.encerramento)}</strong>${botaoEstrela(l.id)}</div>
     <section class="resumo"><h3>Resumo</h3>${resumir(d).map((p) => `<p>${esc(p)}</p>`).join("")}</section>
+    ${facilHTML(d.facil || { nota: l.facil, motivos: [] })}
     <div class="acoes">
       <a class="btn prim" href="${linkPNCP(d)}" target="_blank" rel="noopener">Ver edital e anexos no PNCP ↗</a>
       ${origem ? `<a class="btn" href="${esc(origem)}" target="_blank" rel="noopener">Abrir na plataforma da disputa ↗</a>` : ""}
@@ -275,6 +444,20 @@ function painelHTML(l, d) {
     <section id="p-itens" hidden><h3>Itens</h3><ul class="arquivos"></ul></section>
     ${d.amparo ? `<section><h3>O que diz a base legal</h3><p class="texto">${esc(d.amparo.descricao)}</p></section>` : ""}
     <p class="nota">Situação no PNCP: ${esc(d.situacao || "—")} · última atualização do órgão em ${dataHora((d.atualizacao || "").slice(0, 16))}.</p>`;
+}
+
+function facilHTML(f) {
+  const sinal = { bom: "+", ruim: "−", neutro: "•" };
+  return `<section class="facil-caixa">
+    <h3>Dá para atender sem grande estrutura?</h3>
+    <div class="facil-topo">
+      <div class="facil-nota" style="color:${corFacil(f.nota)}">${f.nota}<small>/100</small></div>
+      <div class="facil-medidor" role="img" aria-label="Facilidade ${f.nota} de 100"><i style="width:${f.nota}%;background:${corFacil(f.nota)}"></i></div>
+      <strong style="color:${corFacil(f.nota)}">${esc(nivelFacil(f.nota))}</strong>
+    </div>
+    ${f.motivos && f.motivos.length ? `<ul class="motivos">${f.motivos.map(([t, txt]) => `<li class="${t}"><span class="s">${sinal[t] || "•"}</span><span>${esc(txt)}</span></li>`).join("")}</ul>` : ""}
+    <p class="nota">Estimativa automática a partir do valor, da modalidade e do texto do objeto. Leia as exigências de habilitação no edital.</p>
+  </section>`;
 }
 
 function formatarCNPJ(c) {
