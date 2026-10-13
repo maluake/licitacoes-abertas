@@ -53,6 +53,28 @@ async function baixarPagina({ uf, mod, pagina }, dataFinal, tentativas = 4) {
   return null;
 }
 
+// coleta anterior (publicada no próprio site): base para detectar novas e alteradas e para cobrir falhas
+const anterior = new Map();
+let historicoAnterior = {};
+let temHistoricoAnterior = false;
+async function carregarAnterior() {
+  const base = process.env.ANTERIOR_DIR; // teste local: pasta com cache.json.gz e historico.json
+  if (!SITE_URL && !base) return;
+  const ler = async (nome) => {
+    if (base) return readFile(path.join(base, nome));
+    const r = await fetch(`${SITE_URL}/data/${nome}`, { signal: AbortSignal.timeout(60000) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return Buffer.from(await r.arrayBuffer());
+  };
+  try {
+    const antigos = JSON.parse(gunzipSync(await ler("cache.json.gz")).toString("utf8"));
+    for (const x of antigos) anterior.set(x.numeroControlePNCP, x);
+    console.log(`Coleta anterior: ${anterior.size} registros`);
+  } catch (e) { console.log(`Sem coleta anterior (${e.message}).`); }
+  try { historicoAnterior = JSON.parse((await ler("historico.json")).toString("utf8")); temHistoricoAnterior = true; }
+  catch (e) { console.log(`Sem histórico anterior (${e.message}).`); }
+}
+
 async function coletarTudo() {
   if (process.env.FIXTURE) {
     const j = JSON.parse(await readFile(process.env.FIXTURE, "utf8"));
@@ -117,18 +139,12 @@ async function coletarTudo() {
   if (total && feitas < total * 0.5) throw new Error("Menos da metade das páginas veio. Abortando para não publicar dados muito incompletos.");
 
   // 4) se algo faltou, reaproveita da coleta anterior o que ainda está aberto
-  if (parcial && SITE_URL) {
-    try {
-      const r = await fetch(`${SITE_URL}/data/cache.json.gz`, { signal: AbortSignal.timeout(60000) });
-      if (r.ok) {
-        const antigos = JSON.parse(gunzipSync(Buffer.from(await r.arrayBuffer())).toString("utf8"));
-        const tem = new Set(registros.map((x) => x.numeroControlePNCP));
-        for (const x of antigos) {
-          if (!tem.has(x.numeroControlePNCP)) { registros.push(x); tem.add(x.numeroControlePNCP); reaproveitados++; }
-        }
-        console.log(`Reaproveitados da coleta anterior: ${reaproveitados}`);
-      } else console.log(`Sem coleta anterior para reaproveitar (HTTP ${r.status}).`);
-    } catch (e) { console.log(`Não deu para ler a coleta anterior: ${e.message}`); }
+  if (parcial && anterior.size) {
+    const tem = new Set(registros.map((x) => x.numeroControlePNCP));
+    for (const x of anterior.values()) {
+      if (!tem.has(x.numeroControlePNCP)) { registros.push(x); tem.add(x.numeroControlePNCP); reaproveitados++; }
+    }
+    console.log(`Reaproveitados da coleta anterior: ${reaproveitados}`);
   }
   return registros;
 }
@@ -280,10 +296,38 @@ function facilidade(r) {
   motivos.sort((a, b) => ordem[a[0]] - ordem[b[0]]);
   return { nota, motivos };
 }
+// "AAAA-MM-DD|tipo" da alteração mais recente (tipo: prazo, valor, texto, situacao, link, edital)
+const ultimaAlteracao = (h) => {
+  const e = (h || []).filter((x) => x.k !== "nova").sort((a, b) => a.d.localeCompare(b.d)).pop();
+  return e ? `${e.d}|${e.k}` : "";
+};
 const nivelFacil = (n) => (n >= 65 ? "Acessível" : n >= 40 ? "Moderada" : "Exige estrutura");
+
+// ---------- novas e alteradas ----------
+const brlNode = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const fmtData = (s) => (s ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}${s.length > 10 ? " às " + s.slice(11, 16) : ""}` : "—");
+const fmtValor = (v) => (typeof v === "number" && v > 1 ? brlNode.format(v) : "não divulgado");
+const normal = (t) => semAcento(String(t || "")).replace(/\s+/g, " ").trim();
+function mudancas(p, r) {
+  const m = [];
+  if ((p.dataEncerramentoProposta || "").slice(0, 16) !== (r.dataEncerramentoProposta || "").slice(0, 16))
+    m.push(["prazo", `Prazo das propostas mudou de ${fmtData(p.dataEncerramentoProposta)} para ${fmtData(r.dataEncerramentoProposta)}`]);
+  if ((p.dataAberturaProposta || "").slice(0, 16) !== (r.dataAberturaProposta || "").slice(0, 16))
+    m.push(["prazo", `Início do envio de propostas mudou de ${fmtData(p.dataAberturaProposta)} para ${fmtData(r.dataAberturaProposta)}`]);
+  if (Math.round((p.valorTotalEstimado || 0) * 100) !== Math.round((r.valorTotalEstimado || 0) * 100))
+    m.push(["valor", `Valor estimado mudou de ${fmtValor(p.valorTotalEstimado)} para ${fmtValor(r.valorTotalEstimado)}`]);
+  if (normal(p.objetoCompra) !== normal(r.objetoCompra)) m.push(["texto", "O texto do objeto foi alterado"]);
+  if (p.modalidadeNome !== r.modalidadeNome) m.push(["texto", `Modalidade mudou de ${p.modalidadeNome} para ${r.modalidadeNome}`]);
+  if (p.situacaoCompraNome !== r.situacaoCompraNome) m.push(["situacao", `Situação mudou para "${r.situacaoCompraNome}"`]);
+  if ((p.linkSistemaOrigem || "") !== (r.linkSistemaOrigem || "") && r.linkSistemaOrigem) m.push(["link", "O link da plataforma de disputa foi alterado"]);
+  if (!m.length && (p.dataAtualizacaoGlobal || "") !== (r.dataAtualizacaoGlobal || "") && r.dataAtualizacaoGlobal)
+    m.push(["edital", "O órgão atualizou a publicação (novo arquivo, edital retificado, esclarecimento ou itens)"]);
+  return m;
+}
 
 // ---------- montagem ----------
 async function main() {
+  await carregarAnterior();
   const brutos = await coletarTudo();
   const agora = new Date();
   // início do dia em Brasília: mantém o que encerra hoje
@@ -303,6 +347,29 @@ async function main() {
     (contagemUF[u] ||= { esperado: null, recebido: 0 }).recebido++;
   }
   lista.sort((a, b) => a.dataEncerramentoProposta.localeCompare(b.dataEncerramentoProposta));
+
+  // histórico de novidades e alterações (guarda 60 dias)
+  const hojeISO = new Date(agora.getTime() - 3 * 3600e3).toISOString().slice(0, 10);
+  const limiteHist = new Date(agora.getTime() - 60 * 86400e3).toISOString().slice(0, 10);
+  const historico = {};
+  let nNovas = 0, nAlteradas = 0;
+  for (const r of lista) {
+    const id = r.numeroControlePNCP;
+    const h = (historicoAnterior[id] || []).filter((e) => e.d >= limiteHist);
+    const add = (k, t, d = hojeISO) => { if (!h.some((e) => e.d === d && e.t === t)) h.push({ d, k, t }); };
+    const p = anterior.get(id);
+    const m = p ? mudancas(p, r) : [];
+    m.forEach(([k, t]) => add(k, t));
+    if (m.length) nAlteradas++;
+    if (!p && anterior.size) { add("nova", "Apareceu no PNCP"); nNovas++; }
+    // ainda sem histórico (primeira vez): usa a data de atualização informada pelo próprio PNCP
+    if (!temHistoricoAnterior && !h.length && r.dataAtualizacaoGlobal && r.dataPublicacaoPncp &&
+        Date.parse(r.dataAtualizacaoGlobal) - Date.parse(r.dataPublicacaoPncp) > 86400e3) {
+      add("edital", "O órgão atualizou a publicação depois de divulgá-la", r.dataAtualizacaoGlobal.slice(0, 10));
+    }
+    if (h.length) historico[id] = h.sort((a, b) => a.d.localeCompare(b.d)).slice(-20);
+  }
+  console.log(`Novas: ${nNovas} · alteradas nesta coleta: ${nAlteradas}`);
 
   const modalidades = [];
   const modIdx = (nome) => {
@@ -339,6 +406,8 @@ async function main() {
       (r.dataPublicacaoPncp || "").slice(0, 10),
       o.esferaId || "",
       fac.nota,
+      ultimaAlteracao(historico[r.numeroControlePNCP]),
+      (historico[r.numeroControlePNCP] || []).find((e) => e.k === "nova")?.d || "",
     ]);
 
     (porUF[uf] ||= {})[r.numeroControlePNCP] = {
@@ -372,6 +441,7 @@ async function main() {
       poder: o.poderId,
       categoria: nomesCategorias[cat],
       facil: { nota: fac.nota, nivel: nivelFacil(fac.nota), motivos: fac.motivos },
+      historico: historico[r.numeroControlePNCP] || [],
     };
   }
 
@@ -383,7 +453,7 @@ async function main() {
     parcial,
     ufs: UFS,
     total: linhas.length,
-    colunas: ["id", "uf", "municipio", "orgao", "objeto", "modalidade", "valor", "encerramento", "categoria", "srp", "publicacao", "esfera", "facilidade"],
+    colunas: ["id", "uf", "municipio", "orgao", "objeto", "modalidade", "valor", "encerramento", "categoria", "srp", "publicacao", "esfera", "facilidade", "alterada", "nova"],
     modalidades,
     categorias: nomesCategorias,
     linhas,
@@ -393,8 +463,9 @@ async function main() {
   }
   // coleta bruta guardada no próprio site: a próxima execução usa para cobrir páginas que falharem
   await writeFile(path.join(OUT, "cache.json.gz"), gzipSync(JSON.stringify(lista)));
+  await writeFile(path.join(OUT, "historico.json"), JSON.stringify(historico));
   await writeFile(path.join(OUT, "meta.json"), JSON.stringify({
-    gerado, parcial, total: linhas.length, brutos: brutos.length, reaproveitados, porUF: contagemUF, erros,
+    gerado, parcial, total: linhas.length, brutos: brutos.length, reaproveitados, novas: nNovas, alteradas: nAlteradas, porUF: contagemUF, erros,
     duracao: decorrido(),
   }, null, 2));
   console.log(`Pronto: ${linhas.length} licitações em aberto (de ${brutos.length} registros recebidos).`);

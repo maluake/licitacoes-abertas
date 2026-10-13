@@ -4,7 +4,9 @@ Site com todas as licitações de SP, RJ, MG e ES que estão com recebimento de 
 [PNCP — Portal Nacional de Contratações Públicas](https://pncp.gov.br/api/consulta/swagger-ui/index.html).
 
 - Lista todas as licitações abertas do Sudeste, com busca e filtros (estado, município, área, modalidade, prazo, valor, esfera, facilidade).
-- Favoritos (guardados no navegador) e botão para baixar a lista filtrada em Excel.
+- Abas: Todas, Minhas disputas (favoritas com contagem regressiva, link da sala e aviso de mudança), Alteradas e Novas (últimos 7 dias).
+- Histórico de alterações por licitação (prazo, valor, objeto, situação, link, edital), comparando cada coleta com a anterior.
+- Botão para baixar a lista filtrada em Excel.
 - Nota de facilidade (0 a 100): estimativa de quanto a licitação pode ser atendida sem grande estrutura, com os motivos.
 - Para incluir outros estados, edite `UFS` em `.github/workflows/atualizar.yml` (ex.: `"SP,RJ,MG,ES,PR"`).
 - Ao clicar, mostra os detalhes, um resumo em linguagem simples e o link para o edital e anexos no PNCP.

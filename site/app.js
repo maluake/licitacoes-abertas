@@ -11,7 +11,7 @@ const el = {
   status: $("status"), q: $("q"), uf: $("f-uf"), mun: $("f-mun"), munX: $("f-mun-x"), listaMun: $("lista-mun"),
   cat: $("f-cat"), mod: $("f-mod"), prazo: $("f-prazo"), valor: $("f-valor"), esfera: $("f-esfera"), facil: $("f-facil"),
   ordem: $("f-ordem"), contagem: $("contagem"), limpar: $("limpar"), medias: $("medias"),
-  soFav: $("so-fav"), nFav: $("n-fav"), baixar: $("baixar"),
+  baixar: $("baixar"), disputas: $("disputas"), vazioTitulo: $("vazio-titulo"),
   lista: $("lista"), vazio: $("vazio"), vazioDica: $("vazio-dica"), mais: $("mais"),
   painel: $("painel"), fundo: $("painel-fundo"), corpo: $("p-corpo"), eyebrow: $("p-eyebrow"), fechar: $("fechar"),
 };
@@ -22,7 +22,7 @@ let filtradas = [];
 let mostrando = 0;
 const cacheUF = {};
 let ultimoFoco = null;
-let soFavoritas = false;
+let porId = new Map();
 
 // ---------- formatação ----------
 const semAcento = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -57,31 +57,93 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const nivelFacil = (n) => (n >= 65 ? "Acessível" : n >= 40 ? "Moderada" : "Exige estrutura");
 const corFacil = (n) => (n >= 65 ? "var(--easy)" : n >= 40 ? "var(--mid)" : "var(--hard)");
 
-// ---------- favoritos (ficam só neste navegador) ----------
+// ---------- abas ----------
+const ABAS = ["todas", "disputas", "alteradas", "novas"];
+const JANELA = 7; // "Alteradas" e "Novas" mostram os últimos 7 dias
+let aba = "todas";
+try { const a = localStorage.getItem("aba"); if (ABAS.includes(a)) aba = a; } catch (e) {}
+const DICAS = {
+  disputas: "",
+  alteradas: "Licitações que o órgão mudou nos últimos 7 dias: prazo, valor, texto do objeto, situação ou edital (arquivos, retificações e esclarecimentos). As mais recentes aparecem primeiro.",
+  novas: "Licitações que apareceram no PNCP nos últimos 7 dias. As mais recentes aparecem primeiro.",
+};
+const TIPO_ALT = { prazo: "Prazo alterado", valor: "Valor alterado", texto: "Objeto alterado", situacao: "Situação alterada", link: "Link da disputa alterado", edital: "Edital atualizado" };
+const diasDesde = (iso) => diaIdx(agoraBR()) - diaIdx(tBR(iso));
+const dataCurta = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+const recenteAlt = (l) => l.alt && diasDesde(l.alt) <= JANELA;
+const recenteNova = (l) => l.nova && diasDesde(l.nova) <= JANELA;
+function trocarAba(a) {
+  if (!ABAS.includes(a) || a === aba) return;
+  aba = a;
+  try { localStorage.setItem("aba", a); } catch (e) {}
+  aplicar();
+  window.scrollTo({ top: 0 });
+}
+document.querySelectorAll(".aba").forEach((b) => b.addEventListener("click", () => trocarAba(b.dataset.aba)));
+
+// ---------- favoritos / minhas disputas (ficam só neste navegador) ----------
 const ESTRELA = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>';
-let favoritos = new Set();
-try { favoritos = new Set(JSON.parse(localStorage.getItem("favoritos") || "[]")); } catch (e) {}
-function salvarFavoritos() { try { localStorage.setItem("favoritos", JSON.stringify([...favoritos])); } catch (e) {} }
-function contarFavoritos() {
-  const n = linhas.filter((l) => favoritos.has(l.id)).length;
-  el.nFav.textContent = n.toLocaleString("pt-BR");
+// id -> { s: quando salvou, o: objeto, g: órgão, m: município, u: UF, e: encerramento, v: valor, a: última alteração conhecida }
+let favoritos = {};
+try { favoritos = JSON.parse(localStorage.getItem("favoritos2") || "{}") || {}; } catch (e) {}
+let favLegado = [];
+try { favLegado = JSON.parse(localStorage.getItem("favoritos") || "[]"); } catch (e) {}
+const ehFav = (id) => Object.prototype.hasOwnProperty.call(favoritos, id);
+function salvarFavoritos() { try { localStorage.setItem("favoritos2", JSON.stringify(favoritos)); } catch (e) {} }
+function instantaneo(l, salvoEm) {
+  return { s: salvoEm || new Date().toISOString(), o: l.objeto, g: l.orgao, m: l.municipio, u: l.uf, e: l.enc, v: l.valor ?? null, a: l.alt || "" };
+}
+function migrarFavoritos() {
+  if (!favLegado.length) return;
+  for (const id of favLegado) { const l = porId.get(id); if (l && !ehFav(id)) favoritos[id] = instantaneo(l); }
+  salvarFavoritos();
+  try { localStorage.removeItem("favoritos"); } catch (e) {}
+}
+// o que mudou desde que a pessoa salvou
+function mudouDesdeSalvo(l, f) {
+  const r = [];
+  if (f.e && l.enc !== f.e) r.push(`Prazo mudou de ${dataHora(f.e)} para ${dataHora(l.enc)}`);
+  if ((f.v ?? null) !== (l.valor ?? null)) r.push(`Valor mudou de ${f.v != null ? brl.format(f.v) : "não divulgado"} para ${l.valor != null ? brl.format(l.valor) : "não divulgado"}`);
+  if (l.alt && l.alt !== (f.a || "") && !(r.length && (l.altTipo === "prazo" || l.altTipo === "valor")))
+    r.push(`${TIPO_ALT[l.altTipo] || "Alterada"} em ${dataCurta(l.alt)}`);
+  return r;
 }
 function alternarFavorito(id) {
-  if (favoritos.has(id)) favoritos.delete(id); else favoritos.add(id);
+  if (ehFav(id)) delete favoritos[id];
+  else { const l = porId.get(id); if (!l) return; favoritos[id] = instantaneo(l); }
   salvarFavoritos();
-  const on = favoritos.has(id);
+  const on = ehFav(id);
   document.querySelectorAll(`[data-fav="${CSS.escape(id)}"]`).forEach((b) => {
-    b.setAttribute("aria-pressed", on);
-    b.setAttribute("aria-label", on ? "Remover dos favoritos" : "Salvar nos favoritos");
-    b.title = on ? "Remover dos favoritos" : "Salvar nos favoritos";
+    if (b.classList.contains("estrela")) {
+      b.setAttribute("aria-pressed", on);
+      b.setAttribute("aria-label", on ? "Remover de Minhas disputas" : "Salvar em Minhas disputas");
+      b.title = on ? "Remover de Minhas disputas" : "Salvar em Minhas disputas";
+    }
   });
-  contarFavoritos();
-  if (soFavoritas && !on) aplicar();
+  if (aba === "disputas") aplicar(); else atualizarAbas();
 }
 function botaoEstrela(id, extra = "") {
-  const on = favoritos.has(id);
-  const rotulo = on ? "Remover dos favoritos" : "Salvar nos favoritos";
+  const on = ehFav(id);
+  const rotulo = on ? "Remover de Minhas disputas" : "Salvar em Minhas disputas";
   return `<button type="button" class="estrela ${extra}" data-fav="${esc(id)}" aria-pressed="${on}" aria-label="${rotulo}" title="${rotulo}">${ESTRELA}</button>`;
+}
+function atualizarAbas() {
+  const fmt = (n) => n.toLocaleString("pt-BR");
+  const ids = Object.keys(favoritos);
+  $("n-todas").textContent = fmt(linhas.length);
+  $("n-disputas").textContent = fmt(ids.length);
+  $("n-alteradas").textContent = fmt(linhas.filter(recenteAlt).length);
+  $("n-novas").textContent = fmt(linhas.filter(recenteNova).length);
+  $("ponto-disputas").hidden = !ids.some((id) => { const l = porId.get(id); return l && mudouDesdeSalvo(l, favoritos[id]).length; });
+  document.querySelectorAll(".aba").forEach((b) => b.setAttribute("aria-selected", b.dataset.aba === aba));
+  $("filtros").dataset.aba = aba;
+  const dica = DICAS[aba] || "";
+  $("aba-dica").textContent = dica; $("aba-dica").hidden = !dica;
+}
+// link do edital no PNCP direto do código de controle (CNPJ-1-SEQ/ANO)
+function linkPNCPid(id) {
+  const m = String(id).match(/^(\d{14})-\d+-(\d+)\/(\d{4})$/);
+  return m ? `https://pncp.gov.br/app/editais/${m[1]}/${m[3]}/${+m[2]}` : "https://pncp.gov.br";
 }
 
 // ---------- carga ----------
@@ -101,9 +163,12 @@ async function carregar() {
     .map((l) => ({
       id: l[0], uf: l[1], municipio: l[2], orgao: l[3], objeto: l[4], mod: l[5], valor: l[6],
       enc: l[7], cat: l[8], srp: l[9], pub: l[10], esfera: l[11], facil: l[12] ?? 50,
+      alt: (l[13] || "").split("|")[0], altTipo: (l[13] || "").split("|")[1] || "", nova: l[14] || "",
       munChave: semAcento(l[2] || ""),
       busca: semAcento(`${l[4]} ${l[3]} ${l[2]} ${l[1]} ${UFS[l[1]] || ""}`),
     }));
+  porId = new Map(linhas.map((l) => [l.id, l]));
+  migrarFavoritos();
   const gerado = new Date(base.gerado);
   el.status.innerHTML = `<b>${linhas.length.toLocaleString("pt-BR")}</b> licitações com propostas abertas em SP, RJ, MG e ES · atualizado em ${gerado.toLocaleDateString("pt-BR")} às ${gerado.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}${base.parcial ? " · a API do governo estava lenta e parte da lista pode faltar hoje" : ""}`;
 
@@ -117,7 +182,6 @@ async function carregar() {
 
   restaurarFiltros();
   montarMunicipios();
-  contarFavoritos();
   aplicar();
   abrirDoEndereco();
 }
@@ -160,6 +224,12 @@ function restaurarFiltros() {
 }
 
 function aplicar() {
+  atualizarAbas();
+  const emDisputas = aba === "disputas";
+  el.lista.hidden = emDisputas;
+  el.disputas.hidden = !emDisputas;
+  if (emDisputas) { renderDisputas(); salvarFiltros(); return; }
+
   const termos = semAcento(el.q.value.trim()).split(/\s+/).filter(Boolean);
   const uf = el.uf.value, cat = el.cat.value, mod = el.mod.value, esfera = el.esfera.value, facil = el.facil.value;
   const prazo = el.prazo.value, valor = el.valor.value;
@@ -169,7 +239,8 @@ function aplicar() {
   const hoje = diaIdx(agoraBR());
 
   filtradas = linhas.filter((l) => {
-    if (soFavoritas && !favoritos.has(l.id)) return false;
+    if (aba === "alteradas" && !recenteAlt(l)) return false;
+    if (aba === "novas" && !recenteNova(l)) return false;
     if (uf && l.uf !== uf) return false;
     if (mun && (l.munChave !== mun.nome || (mun.uf && l.uf !== mun.uf))) return false;
     if (cat !== "" && l.cat !== +cat) return false;
@@ -191,15 +262,18 @@ function aplicar() {
   else if (o === "recentes") filtradas.sort((a, b) => b.pub.localeCompare(a.pub) || a.enc.localeCompare(b.enc));
   else if (o === "facil") filtradas.sort((a, b) => b.facil - a.facil || a.enc.localeCompare(b.enc));
   else filtradas.sort((a, b) => a.enc.localeCompare(b.enc));
+  // nas abas Alteradas e Novas, o mais recente vem primeiro (a ordem escolhida desempata)
+  if (aba === "alteradas") filtradas.sort((a, b) => b.alt.localeCompare(a.alt));
+  if (aba === "novas") filtradas.sort((a, b) => b.nova.localeCompare(a.nova));
 
   FILTROS.forEach((c) => el[c].classList.toggle("ativo", el[c].value !== ""));
   el.munX.hidden = !el.mun.value;
-  const temFiltro = termos.length || soFavoritas || FILTROS.some((c) => el[c].value !== "");
+  const temFiltro = termos.length || FILTROS.some((c) => el[c].value !== "");
   el.limpar.hidden = !temFiltro;
-  el.soFav.setAttribute("aria-pressed", soFavoritas);
   const soma = filtradas.reduce((s, l) => s + (l.valor || 0), 0);
-  el.contagem.textContent = temFiltro
-    ? `${filtradas.length.toLocaleString("pt-BR")} encontradas · ${brlCurto(soma)} em valor estimado`
+  const nome = { todas: "licitações", alteradas: "alteradas", novas: "novas" }[aba];
+  el.contagem.textContent = temFiltro || aba !== "todas"
+    ? `${filtradas.length.toLocaleString("pt-BR")} ${aba === "todas" ? "encontradas" : nome} · ${brlCurto(soma)} em valor estimado`
     : `Mostrando todas · ${brlCurto(soma)} em valor estimado`;
   mostrarMedias();
 
@@ -207,11 +281,149 @@ function aplicar() {
   mostrando = 0;
   maisItens();
   el.vazio.hidden = filtradas.length > 0;
-  el.vazioDica.textContent = soFavoritas && !favoritos.size
-    ? "Você ainda não salvou nenhuma. Toque na estrela de uma licitação para guardá-la aqui."
-    : "Tente outra palavra ou remova algum filtro.";
+  el.vazioTitulo.textContent = aba === "alteradas" ? "Nenhuma licitação alterada nos últimos 7 dias com esses filtros."
+    : aba === "novas" ? "Nenhuma licitação nova nos últimos 7 dias com esses filtros." : "Nenhuma licitação encontrada.";
+  el.vazioDica.textContent = "Tente outra palavra ou remova algum filtro.";
   salvarFiltros();
 }
+
+// ---------- minhas disputas ----------
+function contador(enc) {
+  const ms = tBR(enc) - agoraBR();
+  if (ms <= 0) return { t: "Prazo encerrado", c: "fim" };
+  const min = Math.floor(ms / 60000), h = Math.floor(min / 60), d = Math.floor(h / 24);
+  if (min < 60) return { t: `Encerra em ${min} min`, c: "urg" };
+  if (h < 24) return { t: `Encerra em ${h} h ${min % 60} min`, c: "urg" };
+  if (d < 7) return { t: `Faltam ${d} ${d === 1 ? "dia" : "dias"} e ${h % 24} h`, c: d <= 2 ? "urg" : "breve" };
+  return { t: `Faltam ${d} dias`, c: "" };
+}
+const SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+function cartaoDisputa(l, f) {
+  const d = new Date(tBR(l.enc));
+  const c = contador(l.enc);
+  const mud = mudouDesdeSalvo(l, f);
+  const nivel = nivelFacil(l.facil);
+  return `<article class="disputa ${mud.length ? "mudou" : ""}" data-id="${esc(l.id)}">
+    <div class="d-quando ${c.c}">
+      <span class="d-sem">${SEMANA[d.getUTCDay()]}</span>
+      <span class="d-dia">${d.getUTCDate()}</span>
+      <span class="d-mes">${MESES[d.getUTCMonth()]}</span>
+      <span class="d-hora">${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}</span>
+    </div>
+    <div class="d-meio">
+      <p class="d-cont ${c.c}" data-enc="${esc(l.enc)}">${c.t}</p>
+      <h3 class="d-obj">${esc(l.objeto)}</h3>
+      <p class="orgao"><b>${esc(l.orgao)}</b> · ${esc(l.municipio)}/${esc(l.uf)}</p>
+      <div class="tags">
+        <span class="tag f-${nivel.split(" ")[0]}">${esc(nivel)}</span>
+        <span class="tag">${esc(base.modalidades[l.mod])}</span>
+        <span class="tag tag-forte">${l.valor != null ? brlCurto(l.valor) : "Valor não divulgado"}</span>
+        <span class="tag d-plat" hidden></span>
+      </div>
+      ${mud.length ? `<div class="d-alerta" role="status">
+        <p><b>Mudou depois que você salvou</b></p>
+        <ul>${mud.map((m) => `<li>${esc(m)}</li>`).join("")}</ul>
+        <button type="button" class="link" data-visto="${esc(l.id)}">Marcar como visto</button>
+      </div>` : ""}
+    </div>
+    <div class="d-acoes">
+      <a class="btn prim d-sala" href="#" target="_blank" rel="noopener" hidden>Abrir sala da disputa ↗</a>
+      <a class="btn" href="${linkPNCPid(l.id)}" target="_blank" rel="noopener">Edital no PNCP ↗</a>
+      <button type="button" class="btn" data-abrir="${esc(l.id)}">Ver detalhes</button>
+      <button type="button" class="btn btn-sutil" data-fav="${esc(l.id)}">Remover</button>
+    </div>
+  </article>`;
+}
+
+function renderDisputas() {
+  const ids = Object.keys(favoritos);
+  const ativos = [], fora = [];
+  for (const id of ids) {
+    const l = porId.get(id);
+    if (l) ativos.push([l, favoritos[id]]); else fora.push([id, favoritos[id]]);
+  }
+  ativos.sort((a, b) => a[0].enc.localeCompare(b[0].enc));
+  filtradas = ativos.map(([l]) => l);
+  el.mais.hidden = true;
+  el.medias.innerHTML = "";
+  el.limpar.hidden = true;
+  el.contagem.textContent = `${ids.length.toLocaleString("pt-BR")} ${ids.length === 1 ? "disputa salva" : "disputas salvas"}`;
+  el.vazio.hidden = ids.length > 0;
+  el.vazioTitulo.textContent = "Você ainda não salvou nenhuma disputa.";
+  el.vazioDica.textContent = "Toque na estrela de uma licitação, em qualquer aba, para acompanhá-la aqui com contagem regressiva, link da sala e aviso quando ela mudar.";
+  if (!ids.length) { el.disputas.innerHTML = ""; return; }
+
+  // resumo
+  const prox = ativos.find(([l]) => tBR(l.enc) > agoraBR());
+  const nMud = ativos.filter(([l, f]) => mudouDesdeSalvo(l, f).length).length;
+  const nSemana = ativos.filter(([l]) => { const x = diasRestantes(l.enc); return x >= 0 && x <= 7; }).length;
+  const soma = ativos.reduce((s, [l]) => s + (l.valor || 0), 0);
+  const resumo = `<div class="d-resumo">
+    <div class="d-kpi"><span>Próxima disputa</span><b>${prox ? `${dataHora(prox[0].enc)}` : "—"}</b><small>${prox ? esc(contador(prox[0].enc).t) : "nenhuma com prazo aberto"}</small></div>
+    <div class="d-kpi"><span>Nos próximos 7 dias</span><b>${nSemana}</b><small>${nSemana === 1 ? "disputa" : "disputas"}</small></div>
+    <div class="d-kpi ${nMud ? "alerta" : ""}"><span>Mudaram depois de salvas</span><b>${nMud}</b><small>${nMud ? "confira os avisos abaixo" : "nenhuma mudança"}</small></div>
+    <div class="d-kpi"><span>Valor somado</span><b>${brlCurto(soma)}</b><small>estimado pelos órgãos</small></div>
+  </div>`;
+
+  // grupos por data
+  const grupos = [["Hoje", []], ["Amanhã", []], ["Próximos 7 dias", []], ["Mais adiante", []]];
+  for (const par of ativos) {
+    const x = diasRestantes(par[0].enc);
+    grupos[x <= 0 ? 0 : x === 1 ? 1 : x <= 7 ? 2 : 3][1].push(par);
+  }
+  let html = resumo;
+  for (const [titulo, itens] of grupos) {
+    if (!itens.length) continue;
+    html += `<section class="d-grupo"><h2>${titulo} <span>${itens.length}</span></h2>${itens.map(([l, f]) => cartaoDisputa(l, f)).join("")}</section>`;
+  }
+  if (fora.length) {
+    html += `<section class="d-grupo d-fora"><h2>Encerradas ou fora da lista <span>${fora.length}</span></h2>
+      <p class="nota">Não aparecem mais entre as licitações com propostas abertas: o prazo acabou, a licitação foi suspensa ou revogada, ou o órgão a tirou do PNCP.</p>
+      <ul class="d-fora-lista">${fora.sort((a, b) => (b[1].e || "").localeCompare(a[1].e || "")).map(([id, f]) => `<li>
+        <div><b>${esc(f.o || "Licitação")}</b><small>${esc(f.g || "")}${f.m ? ` · ${esc(f.m)}/${esc(f.u)}` : ""}${f.e ? ` · prazo era ${dataHora(f.e)}` : ""}</small></div>
+        <div class="d-fora-acoes"><a class="btn" href="${linkPNCPid(id)}" target="_blank" rel="noopener">Ver no PNCP ↗</a><button type="button" class="btn btn-sutil" data-fav="${esc(id)}">Remover</button></div>
+      </li>`).join("")}</ul></section>`;
+  }
+  el.disputas.innerHTML = html;
+
+  // link da sala e plataforma vêm dos detalhes de cada estado
+  const ufs = [...new Set(ativos.map(([l]) => l.uf))];
+  ufs.forEach((u) => detalhesUF(u).then((det) => {
+    if (aba !== "disputas") return;
+    for (const [l] of ativos) {
+      if (l.uf !== u || !det[l.id]) continue;
+      const d = det[l.id];
+      const card = el.disputas.querySelector(`.disputa[data-id="${CSS.escape(l.id)}"]`);
+      if (!card) continue;
+      const sala = d.linkEletronico || d.linkOrigem;
+      const a = card.querySelector(".d-sala");
+      if (sala) { a.href = sala; a.hidden = false; }
+      const p = card.querySelector(".d-plat");
+      if (d.plataforma) { p.textContent = d.plataforma; p.hidden = false; }
+    }
+  }).catch(() => {}));
+}
+// contagem regressiva ao vivo
+setInterval(() => {
+  if (aba !== "disputas") return;
+  el.disputas.querySelectorAll(".d-cont[data-enc]").forEach((n) => {
+    const c = contador(n.dataset.enc);
+    n.textContent = c.t; n.className = `d-cont ${c.c}`;
+  });
+}, 30000);
+el.disputas.addEventListener("click", (e) => {
+  const visto = e.target.closest("[data-visto]");
+  if (visto) {
+    const id = visto.dataset.visto, l = porId.get(id);
+    if (l && ehFav(id)) { favoritos[id] = instantaneo(l, favoritos[id].s); salvarFavoritos(); aplicar(); }
+    return;
+  }
+  const ab = e.target.closest("[data-abrir]");
+  if (ab) { abrir(ab.dataset.abrir); return; }
+  if (e.target.closest("a, button")) return;
+  const card = e.target.closest(".disputa");
+  if (card) abrir(card.dataset.id);
+});
 
 // médias da seleção atual: facilidade, proporção por nível e valor típico
 function mostrarMedias() {
@@ -249,11 +461,18 @@ function linhaHTML(l) {
     <div class="meio">
       <p class="objeto">${esc(l.objeto)}</p>
       <p class="orgao"><b>${esc(l.orgao)}</b> · ${esc(l.municipio)}/${esc(l.uf)}</p>
-      <div class="tags"><span class="tag f-${nivel.split(" ")[0]}" title="Facilidade ${l.facil}/100">${esc(nivel)}</span><span class="tag">${esc(modNome)}</span><span class="tag">${esc(base.categorias[l.cat])}</span>${l.srp ? '<span class="tag">Registro de preços</span>' : ""}</div>
+      <div class="tags">${selos(l)}<span class="tag f-${nivel.split(" ")[0]}" title="Facilidade ${l.facil}/100">${esc(nivel)}</span><span class="tag">${esc(modNome)}</span><span class="tag">${esc(base.categorias[l.cat])}</span>${l.srp ? '<span class="tag">Registro de preços</span>' : ""}</div>
     </div>
     <div class="valor">${l.valor != null ? `<div class="v">${brlCurto(l.valor)}</div><div class="vl">estimado</div>` : '<div class="nd">valor não divulgado</div>'}</div>
     ${botaoEstrela(l.id)}
   </li>`;
+}
+
+function selos(l) {
+  let h = "";
+  if (recenteNova(l)) h += `<span class="selo selo-nova" title="Apareceu no PNCP em ${dataCurta(l.nova)}">Nova</span>`;
+  if (l.alt && diasDesde(l.alt) <= 15) h += `<span class="selo selo-alt" title="Última alteração em ${dataCurta(l.alt)}">${esc(TIPO_ALT[l.altTipo] || "Alterada")} · ${dataCurta(l.alt)}</span>`;
+  return h;
 }
 
 function maisItens() {
@@ -275,10 +494,8 @@ el.uf.addEventListener("change", () => {
 el.mun.addEventListener("change", aplicar);
 el.mun.addEventListener("input", () => { if (!el.mun.value) aplicar(); });
 el.munX.addEventListener("click", () => { el.mun.value = ""; aplicar(); el.mun.focus(); });
-el.soFav.addEventListener("click", () => { soFavoritas = !soFavoritas; aplicar(); });
 el.limpar.addEventListener("click", () => {
   el.q.value = ""; FILTROS.forEach((c) => (el[c].value = ""));
-  soFavoritas = false;
   montarMunicipios(); aplicar();
 });
 el.mais.addEventListener("click", maisItens);
@@ -323,7 +540,8 @@ el.baixar.addEventListener("click", async () => {
         "Nível": nivelFacil(l.facil),
         "Registro de preços": l.srp ? "Sim" : "Não",
         "Plataforma da disputa": d.plataforma || "",
-        "Favorita": favoritos.has(l.id) ? "Sim" : "",
+        "Em Minhas disputas": ehFav(l.id) ? "Sim" : "",
+        "Última alteração": l.alt ? `${dataCurta(l.alt)} (${TIPO_ALT[l.altTipo] || "alterada"})` : "",
         "Link PNCP": d.cnpj ? linkPNCP(d) : "",
         "Link da disputa": d.linkEletronico || d.linkOrigem || "",
         "Código PNCP": l.id,
@@ -359,6 +577,12 @@ el.lista.addEventListener("keydown", (e) => {
   if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("item")) { e.preventDefault(); abrir(e.target.dataset.id); }
 });
 el.fechar.addEventListener("click", fechar);
+el.corpo.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-visto-painel]");
+  if (!b) return;
+  const id = b.dataset.vistoPainel, l = porId.get(id);
+  if (l && ehFav(id)) { favoritos[id] = instantaneo(l, favoritos[id].s); salvarFavoritos(); b.closest(".d-alerta").remove(); aplicar(); }
+});
 el.fundo.addEventListener("click", fechar);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !el.painel.hidden) fechar(); });
 window.addEventListener("hashchange", abrirDoEndereco);
@@ -431,6 +655,7 @@ function painelHTML(l, d) {
   return `
     <h2 id="p-titulo">${esc(d.objeto)}</h2>
     <div class="prazo-grande"><span class="falta ${classeFalta(dias)}">${textoFalta(dias)}</span><strong>Propostas até ${dataHora(d.encerramento)}</strong>${botaoEstrela(l.id)}</div>
+    ${historicoHTML(l, d)}
     <section class="resumo"><h3>Resumo</h3>${resumir(d).map((p) => `<p>${esc(p)}</p>`).join("")}</section>
     ${facilHTML(d.facil || { nota: l.facil, motivos: [] })}
     <div class="acoes">
@@ -444,6 +669,22 @@ function painelHTML(l, d) {
     <section id="p-itens" hidden><h3>Itens</h3><ul class="arquivos"></ul></section>
     ${d.amparo ? `<section><h3>O que diz a base legal</h3><p class="texto">${esc(d.amparo.descricao)}</p></section>` : ""}
     <p class="nota">Situação no PNCP: ${esc(d.situacao || "—")} · última atualização do órgão em ${dataHora((d.atualizacao || "").slice(0, 16))}.</p>`;
+}
+
+const ROTULO_HIST = { nova: "Nova", prazo: "Prazo", valor: "Valor", texto: "Objeto", situacao: "Situação", link: "Link", edital: "Edital" };
+function historicoHTML(l, d) {
+  const h = (d.historico || []).slice().reverse();
+  const mud = ehFav(l.id) ? mudouDesdeSalvo(l, favoritos[l.id]) : [];
+  if (!h.length && !mud.length) return "";
+  const recente = h.some((e) => e.k !== "nova" && diasDesde(e.d) <= JANELA);
+  return `<section class="hist ${recente || mud.length ? "hist-alerta" : ""}">
+    <h3>Novidades e alterações</h3>
+    ${mud.length ? `<div class="d-alerta"><p><b>Mudou depois que você salvou</b></p><ul>${mud.map((m) => `<li>${esc(m)}</li>`).join("")}</ul>
+      <button type="button" class="link" data-visto-painel="${esc(l.id)}">Marcar como visto</button></div>` : ""}
+    ${h.length ? `<ol class="linha-tempo">${h.map((e) => `<li class="lt-${esc(e.k)}">
+      <span class="lt-data">${dataCurta(e.d)}</span><span class="lt-tipo">${esc(ROTULO_HIST[e.k] || "Alteração")}</span><span class="lt-txt">${esc(e.t)}</span></li>`).join("")}</ol>` : ""}
+    ${h.some((e) => e.k === "edital") ? `<p class="nota">Para ver o que exatamente mudou no edital, abra a lista de arquivos no PNCP.</p>` : ""}
+  </section>`;
 }
 
 function facilHTML(f) {

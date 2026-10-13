@@ -21,8 +21,18 @@
   </div>
 </header>
 
-<section class="filtros" aria-label="Filtros">
+<section class="filtros" id="filtros" aria-label="Filtros" data-aba="todas">
   <div class="filtros-in">
+    <nav class="abas" role="tablist" aria-label="Visões">
+      <button type="button" role="tab" class="aba" data-aba="todas" aria-selected="true">Todas <span class="n" id="n-todas"></span></button>
+      <button type="button" role="tab" class="aba aba-fav" data-aba="disputas" aria-selected="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>
+        <span class="so-largo">Minhas disputas</span><span class="so-curto">Disputas</span> <span class="n" id="n-disputas"></span><i class="ponto" id="ponto-disputas" hidden title="Alguma disputa salva mudou"></i>
+      </button>
+      <button type="button" role="tab" class="aba aba-alt" data-aba="alteradas" aria-selected="false">Alteradas <span class="n" id="n-alteradas"></span></button>
+      <button type="button" role="tab" class="aba aba-nova" data-aba="novas" aria-selected="false">Novas <span class="n" id="n-novas"></span></button>
+    </nav>
+    <p class="aba-dica" id="aba-dica" hidden></p>
     <label class="busca" for="q">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
       <input id="q" type="search" placeholder="Buscar por objeto ou órgão (ex.: merenda, uniforme, consultoria)" autocomplete="off">
@@ -78,10 +88,6 @@
         <button id="limpar" type="button" class="link" hidden>Limpar filtros</button>
       </div>
       <div class="barra-acoes">
-        <button id="so-fav" type="button" class="pilula" aria-pressed="false">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg>
-          <span>Favoritas <b id="n-fav">0</b></span>
-        </button>
         <button id="baixar" type="button" class="pilula">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14"/></svg>
           <span>Baixar planilha</span>
@@ -94,8 +100,9 @@
 
 <main class="lista-wrap">
   <ol id="lista" class="lista" aria-live="polite"></ol>
+  <section id="disputas" class="disputas" hidden aria-live="polite"></section>
   <div id="vazio" class="vazio" hidden>
-    <p><strong>Nenhuma licitação encontrada.</strong></p>
+    <p><strong id="vazio-titulo">Nenhuma licitação encontrada.</strong></p>
     <p id="vazio-dica">Tente outra palavra ou remova algum filtro.</p>
   </div>
   <button id="mais" type="button" class="mais" hidden>Mostrar mais</button>
