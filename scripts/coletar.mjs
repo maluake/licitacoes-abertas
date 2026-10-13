@@ -195,58 +195,89 @@ function curto(s, n) {
 
 // ---------- facilidade: dá para atender sem grande estrutura? ----------
 // Estimativa por regras simples (valor, modalidade, área e palavras do objeto). Nota de 0 a 100.
+// O que pesa contra: atividades que pedem licença, registro em conselho, equipe técnica ou estrutura própria.
 const EXIGE = [
-  [/\bobras?\b|engenharia|paviment|construc|edifica|terraplen|drenagem|recapeamento|saneamento/, "Obra ou serviço de engenharia (pede responsável técnico, equipe e equipamentos)"],
-  [/mao de obra|dedicacao exclusiva|postos? de trabalho|terceiriz/, "Mão de obra dedicada (exige funcionários contratados para o órgão)"],
-  [/vigilancia|seguranca patrimonial/, "Vigilância (atividade com autorização da Polícia Federal)"],
-  [/coleta de (lixo|residuos)|residuos solidos|aterro/, "Coleta de resíduos (frota e licenças ambientais)"],
-  [/transporte escolar|transporte de passageiros|fretamento|onibus/, "Transporte de pessoas (frota e motoristas habilitados)"],
-  [/hospitalar|plantao|plantoes|\buti\b|hemodialise|cirurg|exames? de imagem|tomografia|ressonancia/, "Serviço de saúde especializado (estrutura clínica e profissionais habilitados)"],
-  [/locacao de (maquinas|veiculos|equipamentos pesados)|maquinas pesadas|caminh(ao|oes)/, "Máquinas ou veículos pesados"],
-  [/combustive|gas liquefeito|\bglp\b/, "Combustíveis (exige autorização da ANP)"],
-  [/medicament|farmac/, "Medicamentos (exige licença sanitária e autorização da Anvisa)"],
+  [/extintor|combate a incendio|prevencao (e combate )?(a|de) incendio|\bavcb\b|\bclcb\b|brigad(a|ista)|hidrante|sprinkler|para-?raios|\bspda\b|bombeiro/, "Prevenção de incêndio (exige empresa credenciada no Corpo de Bombeiros)"],
+  [/\bgas(es)?\b|\bglp\b|gas liquefeito|botij|oxigenio|gases medicinais|nitrogenio/, "Gás (exige autorização da ANP e transporte especial)"],
+  [/combustive|gasolina|diesel|etanol|lubrificante/, "Combustíveis (exige autorização da ANP)"],
+  [/\bmedic(o|a|os|as|amentos?|inal|inais|ina)\b|medicament|hospital|saude|farmac|enferm|odontol|clinic|ambulat|laborator|exames?\b|cirurg|\bsus\b|\bubs\b|\bupa\b|\bopme\b|ortes|protes|fisioter|psicolog|nutricion|vacina|hemodial|instrumental|insumos? (hospitalar|medic)|correlato/, "Área da saúde (licença da Vigilância Sanitária/Anvisa ou profissionais habilitados)"],
+  [/(?<!mao de )\bobras?\b|engenharia|paviment|construc|edifica|terraplen|drenagem|recapeamento|saneamento|reforma (de|do|da|predial)|manutencao predial/, "Obra ou engenharia (responsável técnico com registro no CREA/CAU)"],
+  [/mao de obra|dedicacao exclusiva|postos? de trabalho|terceiriz|servicos? (continuos? )?de limpeza|limpeza (e conservacao|predial|urbana)|portaria|recepcionista|copeir|zeladoria/, "Mão de obra dedicada (funcionários contratados para o órgão)"],
+  [/manutencao (preventiva |corretiva |preventiva e corretiva )?(de |do |dos |da |das |em )?(\w+ )?(ar[- ]condicionado|aparelhos de ar|climatiz|refrigerac|elevador|gerador|subestac|nobreak|rede eletrica|instalacoes eletricas)|\bpmoc\b/, "Manutenção técnica (técnico habilitado; ar-condicionado costuma exigir PMOC com engenheiro)"],
+  [/vigilancia|seguranca patrimonial|monitoramento eletronico/, "Vigilância (autorização da Polícia Federal)"],
+  [/coleta de (lixo|residuos)|residuos (solidos|de saude)|aterro|dedetiz|desratiz|controle de pragas|limpeza de fossa/, "Resíduos ou controle de pragas (licença ambiental ou sanitária)"],
+  [/transporte escolar|transporte de (passageiros|pacientes|alunos)|fretamento|onibus|ambulancia|remocao/, "Transporte de pessoas (frota e motoristas habilitados)"],
+  [/locacao de (maquinas|veiculos|equipamentos pesados)|maquinas pesadas|caminh(ao|oes)|retroescavadeira|motoniveladora/, "Máquinas ou veículos pesados"],
+  [/refeic(ao|oes) (prontas|preparadas)|alimentacao preparada|marmitex|cozinha industrial|merenda escolar preparada/, "Refeições preparadas (cozinha com alvará sanitário)"],
+  [/consultoria|assessoria|auditoria|advocac|juridic|contabil|pericia|elaboracao de projetos?|georreferenc|topograf/, "Serviço técnico especializado (profissional com registro em conselho)"],
+  [/\bcrea\b|\bcau\b|\bcrm\b|\bcrf\b|\bcrmv\b|\bcrq\b|responsavel tecnico|licenca ambiental|alvara sanitario|licenca sanitaria|anvisa/, "O texto já cita registro em conselho ou licença específica"],
+  [/(pessoas? juridicas?|empresas?) (especializadas?|habilitadas?|credenciadas?)|especializada em/, "Pede empresa especializada (costuma exigir atestados de capacidade técnica)"],
 ];
+// O que pesa a favor: compra de produtos comuns, que dá para revender ou produzir sem equipe técnica.
 const ACESSIVEL = [
-  [/material de expediente|papelaria|materia(l|is) de (consumo|limpeza|escritorio)|copa e cozinha|descartave/, "Fornecimento de materiais comuns"],
-  [/brinde|camiseta|uniforme|fardamento|bandeira|trofeu|medalha/, "Itens personalizados ou confecção"],
-  [/grafic|impress(o|ao) de|banner|placas? de sinaliz/, "Serviços gráficos"],
-  [/consultoria|assessoria|capacitac|treinamento|palestra|curso/, "Serviço intelectual (consultoria ou treinamento)"],
-  [/software|licenca|sistema informatizado|site|aplicativo|suporte tecnico/, "Tecnologia ou software"],
-  [/genero alimenticio|aliment|lanche|coffee break|hortifrut|cesta basica/, "Fornecimento de alimentos"],
-  [/evento|show|apresentac|artist|sonorizac|decorac/, "Eventos ou apresentações"],
-  [/mobili|eletrodomest|equipamentos? de informatica|notebook|computador|ar condicionado/, "Revenda de equipamentos"],
+  [/grafic|impress(o|os|ao) (de|grafic)|banner|faixas?\b|folder|panfleto|cartaz|adesivo|placas? (de sinaliz|de identific|indicativ)|plotag|carimbo|envelope|cartao de visita|convite|apostila|encaderna/, "Serviço gráfico (produção simples, sem licença específica)", 22, true],
+  [/instrumentos? musica|instrumentos? de (sopro|percussao|corda)|fanfarra|banda marcial|violao|teclado musical|bateria musical/, "Instrumentos musicais (revenda de produtos)", 22],
+  [/ferramenta|instrumentos? de (medicao|precisao|desenho)|trena|paquimetro|multimetro/, "Ferramentas ou instrumentos (revenda de produtos)", 20],
+  [/material de expediente|papelaria|materia(l|is) de (consumo|escritorio|limpeza|higiene)|copa e cozinha|descartave|utensilio/, "Materiais comuns de consumo", 20],
+  [/brinde|camiseta|uniforme|fardamento|bandeira|trofeu|medalha|bone|squeeze|caneca|mochila|bolsa/, "Itens personalizados ou confecção", 20, true],
+  [/material (esportivo|pedagogico|didatico|escolar)|brinquedo|jogos? educativ|livros?\b|kit escolar/, "Materiais escolares, esportivos ou livros", 18],
+  [/mobili|moveis|cadeira|mesa\b|armario|eletrodomest|eletroeletronic|equipamentos? de informatica|notebook|computador|impressora|tablet|ar condicionado|ventilador|bebedouro/, "Revenda de equipamentos ou móveis", 14],
+  [/genero alimenticio|hortifrut|cesta basica|lanche|coffee break|agua mineral|cafe\b|acucar/, "Fornecimento de alimentos industrializados", 10],
+  [/decorac|ornament|natal|flores|arranjo/, "Decoração", 12, true],
 ];
-function facilidade(r, catNome) {
+function facilidade(r) {
   let nota = 50;
   const motivos = [];
   const t = semAcento(`${r.objetoCompra || ""} ${r.informacaoComplementar || ""}`);
   const v = typeof r.valorTotalEstimado === "number" && r.valorTotalEstimado > 1 ? r.valorTotalEstimado : null;
   const m = semAcento(r.modalidadeNome || "");
 
-  if (v == null) motivos.push(["neutro", "Valor estimado não divulgado"]);
-  else if (v <= 80000) { nota += 25; motivos.push(["bom", "Valor até R$ 80 mil (faixa em que a lei costuma reservar a disputa a micro e pequenas empresas)"]); }
-  else if (v <= 500000) { nota += 12; motivos.push(["bom", "Valor moderado (até R$ 500 mil)"]); }
-  else if (v <= 3000000) { motivos.push(["neutro", "Valor médio (até R$ 3 milhões)"]); }
-  else if (v <= 15000000) { nota -= 18; motivos.push(["ruim", "Valor alto (acima de R$ 3 milhões costuma exigir garantia e capacidade financeira)"]); }
-  else { nota -= 30; motivos.push(["ruim", "Valor muito alto (acima de R$ 15 milhões)"]); }
+  // 1) o que é: algo que exige licença/estrutura?
+  const exigencias = EXIGE.filter(([re]) => re.test(t)).slice(0, 3);
+  for (const [, txt] of exigencias) motivos.push(["ruim", txt]);
+  if (exigencias.length) nota -= 18 + 6 * (exigencias.length - 1);
 
-  if (/dispensa/.test(m)) { nota += 15; motivos.push(["bom", "Dispensa: processo simples e rápido"]); }
-  else if (/credenciamento/.test(m)) { nota += 8; motivos.push(["bom", "Credenciamento: sem disputa de preço, basta cumprir os requisitos"]); }
+  // 2) se não exige, é um produto comum?
+  if (!exigencias.length) {
+    // serviços (manutenção, instalação, locação…) só contam como fáceis se forem gráficos, confecção ou decoração
+    const ehServico = /^\s*(\[[^\]]*\]\s*-?\s*)?(registro de precos?.{0,40})?(contratac|prestac|servic|manutenc|instalac|locac)/.test(t) && !/(aquisic|fornecimento|compra) de/.test(t.slice(0, 120));
+    const ac = ACESSIVEL.find(([re, , , servicoOk]) => re.test(t) && (!ehServico || servicoOk));
+    if (ac) { nota += ac[2]; motivos.push(["bom", ac[1]]); }
+    else if (/^\s*(\[[^\]]*\]\s*-?\s*)?(registro de precos?.{0,40})?(aquisic|compra|fornecimento)/.test(t)) {
+      nota += 10; motivos.push(["bom", "Compra de produtos (basta fornecer, sem equipe técnica)"]);
+    } else if (ehServico || /servic|contratac|prestac/.test(t)) {
+      nota -= 6; motivos.push(["neutro", "Prestação de serviço (confira no edital se pede equipe ou atestados)"]);
+    }
+  }
+
+  // 3) modalidade
+  if (/credenciamento/.test(m)) { nota -= 22; motivos.push(["ruim", "Credenciamento: costuma pedir habilitação específica, documentação extensa e contrato de longo prazo"]); }
+  else if (/dispensa/.test(m)) { nota += 14; motivos.push(["bom", "Dispensa: processo simples e rápido"]); }
   else if (/pregao/.test(m)) { nota += 4; motivos.push(["neutro", "Pregão: disputa por preço com documentação padrão"]); }
   else if (/concorrencia/.test(m)) { nota -= 15; motivos.push(["ruim", "Concorrência: modalidade de contratações complexas"]); }
   else if (/inexigibilidade/.test(m)) { nota -= 30; motivos.push(["ruim", "Inexigibilidade: normalmente já tem fornecedor definido"]); }
-  else if (/dialogo|pre-?qualificacao/.test(m)) { nota -= 15; motivos.push(["ruim", "Modalidade com seleção prévia de empresas"]); }
+  else if (/dialogo|pre-?qualificacao|manifestacao/.test(m)) { nota -= 15; motivos.push(["ruim", "Modalidade com seleção prévia de empresas"]); }
+  else if (/leilao/.test(m)) { nota -= 10; motivos.push(["neutro", "Leilão: o órgão está vendendo bens, não comprando"]); }
 
-  let exige = 0;
-  for (const [re, txt] of EXIGE) if (re.test(t) && exige < 2) { nota -= 20; exige++; motivos.push(["ruim", txt]); }
-  if (!exige) {
-    const ac = ACESSIVEL.find(([re]) => re.test(t));
-    if (ac) { nota += 12; motivos.push(["bom", ac[1]]); }
-  }
+  // 4) valor
+  if (v == null) motivos.push(["neutro", "Valor estimado não divulgado"]);
+  else if (v <= 80000) { nota += 18; motivos.push(["bom", "Valor até R$ 80 mil (faixa em que a lei costuma reservar a disputa a micro e pequenas empresas)"]); }
+  else if (v <= 500000) { nota += 8; motivos.push(["bom", "Valor moderado (até R$ 500 mil)"]); }
+  else if (v <= 3000000) motivos.push(["neutro", "Valor médio (até R$ 3 milhões)"]);
+  else if (v <= 15000000) { nota -= 15; motivos.push(["ruim", "Valor alto (acima de R$ 3 milhões costuma exigir garantia e capacidade financeira)"]); }
+  else { nota -= 25; motivos.push(["ruim", "Valor muito alto (acima de R$ 15 milhões)"]); }
+
   if (r.srp) { nota += 4; motivos.push(["bom", "Registro de preços: entregas sob demanda, em lotes menores"]); }
-  if (exige) nota = Math.min(nota, 35); // atividade que por natureza pede estrutura própria
+
+  // atividade que por natureza pede licença ou estrutura nunca passa de "Exige estrutura"
+  if (exigencias.length) nota = Math.min(nota, 35);
+  // credenciamento nunca passa de "Moderada"
+  if (/credenciamento/.test(m)) nota = Math.min(nota, 45);
 
   nota = Math.max(0, Math.min(100, Math.round(nota)));
+  // motivos: primeiro os que pesam contra, depois a favor, depois neutros
+  const ordem = { ruim: 0, bom: 1, neutro: 2 };
+  motivos.sort((a, b) => ordem[a[0]] - ordem[b[0]]);
   return { nota, motivos };
 }
 const nivelFacil = (n) => (n >= 65 ? "Acessível" : n >= 40 ? "Moderada" : "Exige estrutura");
@@ -291,7 +322,7 @@ async function main() {
     const orgao = titulo(o.razaoSocial);
     const unidade = titulo(u.nomeUnidade);
     const cat = categoria(r.objetoCompra + " " + (r.informacaoComplementar || ""));
-    const fac = facilidade(r, nomesCategorias[cat]);
+    const fac = facilidade(r);
     const valor = typeof r.valorTotalEstimado === "number" && r.valorTotalEstimado > 1 ? Math.round(r.valorTotalEstimado * 100) / 100 : null;
 
     linhas.push([
