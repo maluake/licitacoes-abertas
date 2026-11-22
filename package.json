@@ -1,0 +1,13 @@
+{
+  "name": "licitacoes-abertas",
+  "private": true,
+  "description": "Licitações abertas do Sudeste coletadas da API pública do PNCP.",
+  "type": "module",
+  "scripts": {
+    "coletar": "node scripts/coletar.mjs",
+    "test": "node --test tests/regras.test.mjs tests/coleta.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
