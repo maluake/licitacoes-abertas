@@ -1,0 +1,346 @@
+{
+  "data": [
+    {
+      "numeroControlePNCP": "00000000000001-1-000001/2099",
+      "unidadeOrgao": {
+        "ufSigla": "SP",
+        "ufNome": "São Paulo",
+        "municipioNome": "Cidade Exemplo",
+        "nomeUnidade": "UNIDADE UNICA"
+      },
+      "orgaoEntidade": {
+        "razaoSocial": "PREFEITURA MUNICIPAL DE CIDADE EXEMPLO",
+        "cnpj": "00000000000001",
+        "esferaId": "M",
+        "poderId": "E"
+      },
+      "objetoCompra": "AQUISIÇÃO DE MATERIAL DE EXPEDIENTE PARA AS SECRETARIAS MUNICIPAIS DE CIDADE EXEMPLO/SP",
+      "informacaoComplementar": "",
+      "modalidadeNome": "Pregão - Eletrônico",
+      "valorTotalEstimado": 45000.0,
+      "srp": true,
+      "dataPublicacaoPncp": "2099-01-02T10:00:00",
+      "dataAtualizacaoGlobal": "2099-01-02T10:00:00",
+      "dataAberturaProposta": "2099-01-03T08:00:00",
+      "dataEncerramentoProposta": "2099-02-20T17:00:00",
+      "anoCompra": 2099,
+      "sequencialCompra": 1,
+      "numeroCompra": "1",
+      "processo": "PROC-1/2099",
+      "modoDisputaNome": "Aberto",
+      "tipoInstrumentoConvocatorioNome": "Edital",
+      "amparoLegal": {
+        "nome": "Lei 14.133/2021, Art. 28, I",
+        "descricao": "pregão"
+      },
+      "situacaoCompraNome": "Divulgada no PNCP",
+      "linkSistemaOrigem": "https://exemplo.invalid/disputa/1",
+      "linkProcessoEletronico": null,
+      "usuarioNome": "Plataforma Fictícia"
+    },
+    {
+      "numeroControlePNCP": "00000000000002-1-000002/2099",
+      "unidadeOrgao": {
+        "ufSigla": "RJ",
+        "ufNome": "Rio de Janeiro",
+        "municipioNome": "Vila Fictícia",
+        "nomeUnidade": "UNIDADE UNICA"
+      },
+      "orgaoEntidade": {
+        "razaoSocial": "PREFEITURA MUNICIPAL DE VILA FICTÍCIA",
+        "cnpj": "00000000000002",
+        "esferaId": "M",
+        "poderId": "E"
+      },
+      "objetoCompra": "Contratação de empresa especializada em prevenção e combate a incêndio, com recarga de extintores",
+      "informacaoComplementar": "",
+      "modalidadeNome": "Pregão - Eletrônico",
+      "valorTotalEstimado": 150000.0,
+      "srp": false,
+      "dataPublicacaoPncp": "2099-01-02T10:00:00",
+      "dataAtualizacaoGlobal": "2099-01-02T10:00:00",
+      "dataAberturaProposta": "2099-01-03T08:00:00",
+      "dataEncerramentoProposta": "2099-02-05T09:00:00",
+      "anoCompra": 2099,
+      "sequencialCompra": 2,
+      "numeroCompra": "2",
+      "processo": "PROC-2/2099",
+      "modoDisputaNome": "Aberto",
+      "tipoInstrumentoConvocatorioNome": "Edital",
+      "amparoLegal": {
+        "nome": "Lei 14.133/2021, Art. 28, I",
+        "descricao": "pregão"
+      },
+      "situacaoCompraNome": "Divulgada no PNCP",
+      "linkSistemaOrigem": "https://exemplo.invalid/disputa/2",
+      "linkProcessoEletronico": null,
+      "usuarioNome": "Plataforma Fictícia"
+    },
+    {
+      "numeroControlePNCP": "00000000000003-1-000003/2099",
+      "unidadeOrgao": {
+        "ufSigla": "MG",
+        "ufNome": "Minas Gerais",
+        "municipioNome": "Serra Inventada",
+        "nomeUnidade": "UNIDADE UNICA"
+      },
+      "orgaoEntidade": {
+        "razaoSocial": "PREFEITURA MUNICIPAL DE SERRA INVENTADA",
+        "cnpj": "00000000000003",
+        "esferaId": "M",
+        "poderId": "E"
+      },
+      "objetoCompra": "Credenciamento de clínicas para realização de exames laboratoriais",
+      "informacaoComplementar": "",
+      "modalidadeNome": "Credenciamento",
+      "valorTotalEstimado": null,
+      "srp": false,
+      "dataPublicacaoPncp": "2099-01-02T10:00:00",
+      "dataAtualizacaoGlobal": "2099-01-02T10:00:00",
+      "dataAberturaProposta": "2099-01-03T08:00:00",
+      "dataEncerramentoProposta": "2099-12-31T23:59:00",
+      "anoCompra": 2099,
+      "sequencialCompra": 3,
+      "numeroCompra": "3",
+      "processo": "PROC-3/2099",
+      "modoDisputaNome": "Aberto",
+      "tipoInstrumentoConvocatorioNome": "Edital",
+      "amparoLegal": {
+        "nome": "Lei 14.133/2021, Art. 28, I",
+        "descricao": "pregão"
+      },
+      "situacaoCompraNome": "Divulgada no PNCP",
+      "linkSistemaOrigem": "https://exemplo.invalid/disputa/3",
+      "linkProcessoEletronico": null,
+      "usuarioNome": "Plataforma Fictícia"
+    },
+    {
+      "numeroControlePNCP": "00000000000004-1-000004/2099",
+      "unidadeOrgao": {
+        "ufSigla": "ES",
+        "ufNome": "Espírito Santo",
+        "municipioNome": "Porto Imaginário",
+        "nomeUnidade": "UNIDADE UNICA"
+      },
+      "orgaoEntidade": {
+        "razaoSocial": "PREFEITURA MUNICIPAL DE PORTO IMAGINÁRIO",
+        "cnpj": "00000000000004",
+        "esferaId": "M",
+        "poderId": "E"
+      },
+      "objetoCompra": "Obra de pavimentação asfáltica de vias urbanas",
+      "informacaoComplementar": "",
+      "modalidadeNome": "Concorrência - Eletrônica",
+      "valorTotalEstimado": 18000000.0,
+      "srp": false,
+      "dataPublicacaoPncp": "2099-01-02T10:00:00",
+      "dataAtualizacaoGlobal": "2099-01-02T10:00:00",
+      "dataAberturaProposta": "2099-01-03T08:00:00",
+      "dataEncerramentoProposta": "2099-03-01T10:00:00",
+      "anoCompra": 2099,
+      "sequencialCompra": 4,
+      "numeroCompra": "4",
+      "processo": "PROC-4/2099",
+      "modoDisputaNome": "Aberto",
+      "tipoInstrumentoConvocatorioNome": "Edital",
+      "amparoLegal": {
+        "nome": "Lei 14.133/2021, Art. 28, I",
+        "descricao": "pregão"
+      },
+      "situacaoCompraNome": "Divulgada no PNCP",
+      "linkSistemaOrigem": "https://exemplo.invalid/disputa/4",
+      "linkProcessoEletronico": null,
+      "usuarioNome": "Plataforma Fictícia"
+    },
+    {
+      "numeroControlePNCP": "00000000000005-1-000005/2099",
+      "unidadeOrgao": {
+        "ufSigla": "SP",
+        "ufNome": "São Paulo",
+        "municipioNome": "Cidade Exemplo",
+        "nomeUnidade": "UNIDADE UNICA"
+      },
+      "orgaoEntidade": {
+        "razaoSocial": "PREFEITURA MUNICIPAL DE CIDADE EXEMPLO",
+        "cnpj": "00000000000005",
+        "esferaId": "M",
+        "poderId": "E"
+      },
+      "objetoCompra": "Confecção de banners e faixas para eventos da prefeitura",
+      "informacaoComplementar": "",
+      "modalidadeNome": "Dispensa",
+      "valorTotalEstimado": 9000.0,
+      "srp": false,
+      "dataPublicacaoPncp": "2099-01-02T10:00:00",
+      "dataAtualizacaoGlobal": "2099-01-02T10:00:00",
+      "dataAberturaProposta": "2099-01-03T08:00:00",
+      "dataEncerramentoProposta": "2099-01-20T12:00:00",
+      "anoCompra": 2099,
+      "sequencialCompra": 5,
+      "numeroCompra": "5",
+      "processo": "PROC-5/2099",
+      "modoDisputaNome": "Aberto",
+      "tipoInstrumentoConvocatorioNome": "Edital",
+      "amparoLegal": {
+        "nome": "Lei 14.133/2021, Art. 28, I",
+        "descricao": "pregão"
+      },
+      "situacaoCompraNome": "Divulgada no PNCP",
+      "linkSistemaOrigem": "https://exemplo.invalid/disputa/5",
+      "linkProcessoEletronico": null,
+      "usuarioNome": "Plataforma Fictícia"
+    },
+    {
+      "numeroControlePNCP": "00000000000006-1-000006/2099",
+      "unidadeOrgao": {
+        "ufSigla": "BA",
+        "ufNome": "Bahia",
+        "municipioNome": "Outra Cidade",
+        "nomeUnidade": "UNIDADE UNICA"
+      },
+      "orgaoEntidade": {
+        "razaoSocial": "PREFEITURA MUNICIPAL DE OUTRA CIDADE",
+        "cnpj": "00000000000006",
+        "esferaId": "M",
+        "poderId": "E"
+      },
+      "objetoCompra": "Aquisição de cadeiras",
+      "informacaoComplementar": "",
+      "modalidadeNome": "Pregão - Eletrônico",
+      "valorTotalEstimado": 30000.0,
+      "srp": false,
+      "dataPublicacaoPncp": "2099-01-02T10:00:00",
+      "dataAtualizacaoGlobal": "2099-01-02T10:00:00",
+      "dataAberturaProposta": "2099-01-03T08:00:00",
+      "dataEncerramentoProposta": "2099-02-01T10:00:00",
+      "anoCompra": 2099,
+      "sequencialCompra": 6,
+      "numeroCompra": "6",
+      "processo": "PROC-6/2099",
+      "modoDisputaNome": "Aberto",
+      "tipoInstrumentoConvocatorioNome": "Edital",
+      "amparoLegal": {
+        "nome": "Lei 14.133/2021, Art. 28, I",
+        "descricao": "pregão"
+      },
+      "situacaoCompraNome": "Divulgada no PNCP",
+      "linkSistemaOrigem": "https://exemplo.invalid/disputa/6",
+      "linkProcessoEletronico": null,
+      "usuarioNome": "Plataforma Fictícia"
+    },
+    {
+      "numeroControlePNCP": "00000000000007-1-000007/2099",
+      "unidadeOrgao": {
+        "ufSigla": "SP",
+        "ufNome": "São Paulo",
+        "municipioNome": "Cidade Exemplo",
+        "nomeUnidade": "UNIDADE UNICA"
+      },
+      "orgaoEntidade": {
+        "razaoSocial": "PREFEITURA MUNICIPAL DE CIDADE EXEMPLO",
+        "cnpj": "00000000000007",
+        "esferaId": "M",
+        "poderId": "E"
+      },
+      "objetoCompra": "Aquisição de papel A4",
+      "informacaoComplementar": "",
+      "modalidadeNome": "Dispensa",
+      "valorTotalEstimado": 5000.0,
+      "srp": false,
+      "dataPublicacaoPncp": "2099-01-02T10:00:00",
+      "dataAtualizacaoGlobal": "2099-01-02T10:00:00",
+      "dataAberturaProposta": "2099-01-03T08:00:00",
+      "dataEncerramentoProposta": "2000-01-01T10:00:00",
+      "anoCompra": 2099,
+      "sequencialCompra": 7,
+      "numeroCompra": "7",
+      "processo": "PROC-7/2099",
+      "modoDisputaNome": "Aberto",
+      "tipoInstrumentoConvocatorioNome": "Edital",
+      "amparoLegal": {
+        "nome": "Lei 14.133/2021, Art. 28, I",
+        "descricao": "pregão"
+      },
+      "situacaoCompraNome": "Divulgada no PNCP",
+      "linkSistemaOrigem": "https://exemplo.invalid/disputa/7",
+      "linkProcessoEletronico": null,
+      "usuarioNome": "Plataforma Fictícia"
+    },
+    {
+      "numeroControlePNCP": "00000000000001-1-000001/2099",
+      "unidadeOrgao": {
+        "ufSigla": "SP",
+        "ufNome": "São Paulo",
+        "municipioNome": "Cidade Exemplo",
+        "nomeUnidade": "UNIDADE UNICA"
+      },
+      "orgaoEntidade": {
+        "razaoSocial": "PREFEITURA MUNICIPAL DE CIDADE EXEMPLO",
+        "cnpj": "00000000000001",
+        "esferaId": "M",
+        "poderId": "E"
+      },
+      "objetoCompra": "AQUISIÇÃO DE MATERIAL DE EXPEDIENTE PARA AS SECRETARIAS MUNICIPAIS DE CIDADE EXEMPLO/SP",
+      "informacaoComplementar": "",
+      "modalidadeNome": "Pregão - Eletrônico",
+      "valorTotalEstimado": 45000.0,
+      "srp": true,
+      "dataPublicacaoPncp": "2099-01-02T10:00:00",
+      "dataAtualizacaoGlobal": "2099-01-02T10:00:00",
+      "dataAberturaProposta": "2099-01-03T08:00:00",
+      "dataEncerramentoProposta": "2099-02-10T17:00:00",
+      "anoCompra": 2099,
+      "sequencialCompra": 1,
+      "numeroCompra": "1",
+      "processo": "PROC-1/2099",
+      "modoDisputaNome": "Aberto",
+      "tipoInstrumentoConvocatorioNome": "Edital",
+      "amparoLegal": {
+        "nome": "Lei 14.133/2021, Art. 28, I",
+        "descricao": "pregão"
+      },
+      "situacaoCompraNome": "Divulgada no PNCP",
+      "linkSistemaOrigem": "https://exemplo.invalid/disputa/1",
+      "linkProcessoEletronico": null,
+      "usuarioNome": "Plataforma Fictícia"
+    },
+    {
+      "numeroControlePNCP": "00000000000008-1-000008/2099",
+      "unidadeOrgao": {
+        "ufSigla": "SP",
+        "ufNome": "São Paulo",
+        "municipioNome": "Cidade Exemplo",
+        "nomeUnidade": "UNIDADE UNICA"
+      },
+      "orgaoEntidade": {
+        "razaoSocial": "PREFEITURA MUNICIPAL DE CIDADE EXEMPLO",
+        "cnpj": "00000000000005",
+        "esferaId": "M",
+        "poderId": "E"
+      },
+      "objetoCompra": "Aquisição de instrumentos musicais para a fanfarra municipal",
+      "informacaoComplementar": "",
+      "modalidadeNome": "Dispensa",
+      "valorTotalEstimado": 60000.0,
+      "srp": false,
+      "dataPublicacaoPncp": "2099-01-02T10:00:00",
+      "dataAtualizacaoGlobal": "2099-01-02T10:00:00",
+      "dataAberturaProposta": "2099-01-03T08:00:00",
+      "dataEncerramentoProposta": "2099-01-20T12:00:00",
+      "anoCompra": 2099,
+      "sequencialCompra": 5,
+      "numeroCompra": "5",
+      "processo": "PROC-5/2099",
+      "modoDisputaNome": "Aberto",
+      "tipoInstrumentoConvocatorioNome": "Edital",
+      "amparoLegal": {
+        "nome": "Lei 14.133/2021, Art. 28, I",
+        "descricao": "pregão"
+      },
+      "situacaoCompraNome": "Divulgada no PNCP",
+      "linkSistemaOrigem": "https://exemplo.invalid/disputa/5",
+      "linkProcessoEletronico": null,
+      "usuarioNome": "Plataforma Fictícia"
+    }
+  ]
+}
